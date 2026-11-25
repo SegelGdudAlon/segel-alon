@@ -3159,10 +3159,15 @@ async function syncDeriv(force){
     const r = await fetch(url); const j = await r.json().catch(() => ({}));
     if(!r.ok){
       const m = (j.error && j.error.message) || '';
-      if(/not supported for this document/i.test(m)) throw { heb:'הקובץ הוא Excel ולא Google Sheets. פתחו אותו ב-Drive ← קובץ ← שמירה כ-Google Sheets, והחליפו את הקישור כאן.' };
-      if(r.status === 403 && /has not been used|disabled/i.test(m)) throw { heb:'Google Sheets API לא מופעל בפרויקט — ראו שלב 7 במדריך.' };
-      if(r.status === 403 || r.status === 404) throw { heb:'אין גישה לקובץ. ודאו שהוא משותף ״כל מי שיש לו את הקישור — צופה״.' };
-      throw { heb:'קריאת הקובץ נכשלה (' + r.status + ').' };
+      const g = ' [Google: ' + r.status + ' ' + m.slice(0,160) + ']';
+      if(/not supported for this document/i.test(m)) throw { heb:'הקישור מפנה לקובץ Excel ולא ל-Google Sheets. פתחו את גרסת ה-Google Sheets, העתיקו את הקישור שלה מסרגל הכתובות, והדביקו אותו בגלגל השיניים.' + g };
+      if(/referer|referrer/i.test(m)) throw { heb:'מפתח ה-API חוסם את כתובת האתר. ב-Google Cloud ← Credentials ← המפתח ← Website restrictions: הוסיפו בדיוק ' + location.origin + '/* (או בחרו None לבדיקה).' + g };
+      if(/API key not valid|API_KEY_INVALID/i.test(m)) throw { heb:'מפתח ה-API שגוי — העתיקו אותו שוב ל-firebase-config.js.' + g };
+      if(/has not been used|is disabled|SERVICE_DISABLED/i.test(m)) throw { heb:'Google Sheets API לא מופעל בפרויקט (שלב 7 במדריך). אחרי ההפעלה זה יכול לקחת כמה דקות.' + g };
+      if(/blocked|API_KEY_SERVICE_BLOCKED/i.test(m)) throw { heb:'המפתח מוגבל ל-API אחר. ב-API restrictions של המפתח בחרו Google Sheets API.' + g };
+      if(r.status === 404) throw { heb:'הקובץ לא נמצא — ודאו שהקישור בגלגל השיניים הוא לגרסת ה-Google Sheets.' + g };
+      if(r.status === 403) throw { heb:'אין גישה לקובץ. ב-Google Sheets: שיתוף ← ״כל מי שיש לו את הקישור״ ← צופה.' + g };
+      throw { heb:'קריאת הקובץ נכשלה.' + g };
     }
     const weeks = parseDerivWorkbook(SHEETS_X, sheetsToWorkbook(j));
     if(!weeks.length) throw { heb:'לא נמצאו שבועות בקובץ — ייתכן שהמבנה שלו השתנה.' };
@@ -3187,7 +3192,7 @@ function derivSourceModal(){
   save.addEventListener('click', async () => {
     const m = link.value.match(/\/d\/([\w-]{20,})/) || link.value.match(/[?&]id=([\w-]{20,})/) || link.value.trim().match(/^([\w-]{20,})$/);
     if(!m) return toast('לא זוהה מזהה קובץ בקישור','err');
-    if(await act(S.db.doc('deriv/source').set(Object.assign(stripId(src), { fileId:m[1], modifiedTime:'' })), 'הקובץ הוחלף — מסנכרן…')){ close(); syncDeriv(true); }
+    if(await act(S.db.doc('deriv/source').set(Object.assign(stripId(src), { fileId:m[1], modifiedTime:'', title:'(קובץ חדש — ממתין לסנכרון)' })), 'הקובץ הוחלף — מסנכרן…')){ close(); syncDeriv(true); }
   });
 }
 
