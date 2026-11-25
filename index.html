@@ -462,6 +462,49 @@ table.tkgrid{border-collapse:separate;border-spacing:0;font-size:13px;min-width:
 .tkgrid .namecol.t3{background:#f9e4e0;box-shadow:-2px 0 0 var(--line),inset -5px 0 0 var(--danger)}
 .tk-nm{display:flex;align-items:center;gap:6px}
 .tk-rank{flex:none;width:20px;height:20px;border-radius:50%;background:rgba(0,0,0,.08);font-size:11px;font-weight:800;display:inline-flex;align-items:center;justify-content:center}
+/* תקפ״ץ — תצוגה מוקטנת (ברירת מחדל): הכול נכנס לרוחב המסך כמו באקסל */
+.tk-wrap.compact{max-height:none;overflow:visible}
+.tk-wrap.compact .tkgrid thead th{top:60px}
+.tk-wrap.compact table.tkgrid{font-size:11px;table-layout:fixed;width:100%;min-width:620px}
+@media (max-width:1180px){.tk-wrap.compact{max-height:calc(100vh - 130px);overflow:auto}.tk-wrap.compact .tkgrid thead th{top:0}}
+.tk-wrap.compact .tkgrid thead th{min-width:0;padding:3px 2px;font-size:10.5px;line-height:1.15}
+.tk-wrap.compact .tkgrid thead th .wk-sub{font-size:9.5px}
+.tk-wrap.compact .tkgrid .namecol{width:124px;min-width:0;max-width:none;padding:3px 5px;font-size:11.5px}
+.tk-wrap.compact .tkgrid .goalcol{width:84px;min-width:0;max-width:none}
+.tk-wrap.compact .tkgrid .typecol{width:38px;min-width:0;font-size:9.5px;padding:2px;line-height:1.1}
+.tk-wrap.compact .tkgrid .cntcol{width:30px;min-width:0!important}
+.tk-wrap.compact .tk-cnt{min-width:0;padding:2px!important;font-size:11px}
+.tk-wrap.compact .tk-cell{min-height:22px;padding:1px 2px;gap:1px}
+.tk-wrap.compact .tk-chip{height:21px;padding:0 4px;font-size:10px;line-height:1.05;border-radius:5px;gap:2px}
+.tk-wrap.compact .tk-chip .st{font-size:9.5px}
+.tk-wrap.compact .tk-chip.multi:not(.first){margin-inline-start:-3px}
+.tk-wrap.compact .tk-chip.multi:not(.last){margin-inline-end:-3px}
+.tk-wrap.compact .tk-chip.multi.first{border-start-start-radius:5px;border-end-start-radius:5px}
+.tk-wrap.compact .tk-chip.multi.last{border-start-end-radius:5px;border-end-end-radius:5px}
+.tk-wrap.compact .tk-ph{height:21px}
+.tk-wrap.compact .tk-goal{padding:3px 5px;font-size:10.5px;min-height:28px;line-height:1.25}
+.tk-wrap.compact .tk-nm{gap:3px}
+.tk-wrap.compact .tk-nm .linkish{font-size:11.5px!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.tk-wrap.compact .tk-mv{flex-direction:row}
+.tk-wrap.compact .tk-mv .icon-btn svg{width:11px;height:11px}
+.tk-wrap.compact .tk-rank{width:16px;height:16px;font-size:9.5px}
+.tk-wrap.compact .tk-req{margin-top:2px;gap:2px;flex-wrap:nowrap}
+.tk-wrap.compact .tk-req span{font-size:9px;padding:0 3px;line-height:1.35}
+.tk-wrap.compact .tk-dots{margin-top:2px;font-size:9.5px}
+.tk-wrap.compact .tk-dots i{width:7px;height:7px}
+.tk-wrap.compact .tkgrid tfoot td{padding:2px;font-size:10.5px}
+.tk-layout:has(.tk-wrap.compact){grid-template-columns:minmax(0,1fr) 230px;gap:12px}
+.tk-layout:has(.tk-wrap.compact) .tk-pal{font-size:11px;padding:3px 6px}
+.tk-layout:has(.tk-wrap.compact) .tk-grp{padding:6px 10px 8px}
+.tk-compact-stats{padding-top:8px!important}
+.tk-compact-stats .stats{display:flex;flex-wrap:wrap;gap:6px}
+.tk-compact-stats .stat{padding:3px 10px;display:flex;align-items:baseline;gap:6px}
+.tk-compact-stats .stat b{font-size:14px;display:inline}
+.tk-compact-stats .stat span{font-size:11.5px}
+.tk-compact-bar{padding-top:6px!important;padding-bottom:6px!important}
+.tk-compact-bar .legend{font-size:11px;gap:4px 10px}
+.tk-compact-bar .legend i{width:10px;height:10px}
+.tk-layout:has(.tk-wrap.compact) .card-head{padding-top:10px;padding-bottom:10px}
 .tk-mv{display:flex;flex-direction:column}
 .tk-mv .icon-btn{padding:1px}
 .tk-mv .icon-btn:disabled{opacity:.25;cursor:default}
@@ -564,12 +607,18 @@ window.__rt = (() => {
   let resolveReady; const readyP = new Promise(r => { resolveReady = r; });
   const caps = {};
   const box = () => document.getElementById('signin');
-  const msg = t => { const m = document.getElementById('signin-msg'); if(m){ m.textContent = t || ''; m.hidden = !t; } };
+  const msg = (t, withCopy) => { const m = document.getElementById('signin-msg'); if(!m) return; m.replaceChildren(); m.hidden = !t; if(!t) return;
+    m.append(document.createTextNode(t));
+    if(withCopy){ const b = document.createElement('button'); b.type = 'button'; b.className = 'copy-link'; b.textContent = 'העתקת הקישור';
+      b.onclick = async () => { const u = location.origin + location.pathname;
+        try { await navigator.clipboard.writeText(u); b.textContent = 'הקישור הועתק ✓'; } catch(_){ window.prompt('העתיקו את הקישור:', u); } };
+      m.append(document.createElement('br'), b); } };
+  const inApp = /FBAN|FBAV|FB_IAB|Instagram|WhatsApp|Line\/|Telegram|Snapchat|TikTok|musical_ly|; wv\)|GSA\//i.test(navigator.userAgent);
   return {
     ready(c){ Object.assign(caps, c); const b = box(); if(b) b.hidden = true; resolveReady(); },
     showSignIn(fn){ const b = box(); if(!b) return; b.hidden = false; document.getElementById('signin-btn').hidden = false; document.getElementById('signin-btn').onclick = () => { msg(''); fn(); };
-      if(/FBAN|FBAV|Instagram|WhatsApp|Line\//i.test(navigator.userAgent)) msg('נפתח מתוך אפליקציה? אם הכניסה לא עובדת — פתחו את הקישור בדפדפן (Chrome / Safari).'); },
-    signinError(t){ msg(t); },
+      if(inApp) msg('הקישור נפתח בתוך אפליקציה (וואטסאפ, אינסטגרם וכד׳), ושם Google לא מאפשר להתחבר. פתחו אותו ב-Safari או ב-Chrome: בתפריט ⋯ בוחרים ״פתיחה בדפדפן״, או מעתיקים את הקישור.', true); },
+    signinError(t, withCopy){ msg(t, withCopy); },
     fail(t){ const b = box(); if(b){ b.hidden = false; document.getElementById('signin-btn').hidden = true; } msg(t); },
     use: async name => { await readyP; return caps[name] ?? null; },
   };
@@ -581,7 +630,8 @@ window.claude = { use: n => window.__rt.use(n) };
 #signin{position:fixed;inset:0;z-index:300}
 #signin-btn{display:inline-flex;align-items:center;gap:10px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:11px 18px;font:inherit;font-weight:700;font-size:15px;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.08)}
 #signin-btn:hover{background:var(--soft)}
-#signin-msg{margin-top:14px;font-size:14px;color:#6e4a06;background:var(--warn-soft);border-radius:10px;padding:9px 12px}
+#signin-msg{margin-top:14px;font-size:14px;color:#6e4a06;background:var(--warn-soft);border-radius:10px;padding:9px 12px;line-height:1.5}
+#signin-msg .copy-link{margin-top:8px;background:#fff;border:1px solid var(--line);border-radius:9px;padding:6px 12px;font:inherit;font-weight:700;cursor:pointer}
 </style>
 </head>
 <body>
@@ -913,7 +963,20 @@ function pageHead(title, sub, actions){
 /* ---------- render loop ---------- */
 let raf = 0;
 function schedule(){ if(raf) return; raf = requestAnimationFrame(()=>{ raf=0; render(); }); }
+// שמירת מיקום הגלילה של טבלאות ואזורים נגללים, כדי שעריכה לא תקפיץ לראש
+const SCROLL_SEL = '.mgrid-wrap,.tk-wrap,.tbl-wrap,.tk-pal-body,.wk-row,.rm-group,.pick-list,.modal-body';
+let lastRenderRoute = null;
 function render(){
+  const app = $('#app'), sameRoute = lastRenderRoute === UI.route, wy = window.scrollY, saved = {};
+  if(sameRoute && app){ const cnt = {}; app.querySelectorAll(SCROLL_SEL).forEach(el => { const k = el.className + '#' + (cnt[el.className] = (cnt[el.className] || 0) + 1); if(el.scrollTop || el.scrollLeft) saved[k] = [el.scrollTop, el.scrollLeft]; }); }
+  lastRenderRoute = UI.route;
+  renderInner();
+  if(sameRoute && app){
+    const cnt = {}; app.querySelectorAll(SCROLL_SEL).forEach(el => { const k = el.className + '#' + (cnt[el.className] = (cnt[el.className] || 0) + 1); const v = saved[k]; if(v){ el.scrollTop = v[0]; el.scrollLeft = v[1]; } });
+    if(Math.abs(window.scrollY - wy) > 1) window.scrollTo(0, wy);
+  }
+}
+function renderInner(){
   const ae = document.activeElement;
   const fid = ae && ae.dataset && ae.dataset.fid;
   let s0, s1; try { s0 = ae.selectionStart; s1 = ae.selectionEnd; } catch {}
@@ -2161,7 +2224,7 @@ function mentorTable(){
         h('span',{class:'tag'}, `${cadets.length} צוערים`),
         editable ? h('button',{class:'btn primary sm',onclick:()=>cadetModal(null)}, icon('plus',15),'הוספת צוערים') : null)),
     h('div',{class:'toolbar',style:{fontSize:'13px'}},
-      h('div',{class:'legend'}, h('span',null, h('i',{style:{background:'#d5eedd'}}), 'בוצע'), h('span',null, h('i',{style:{background:'var(--accent-soft)'}}), 'מתוכנן'), h('span',null, h('i',{style:{background:'#fff',border:'1px solid var(--line)'}}), 'טרם בוצע'), h('span',null, h('i',{style:{background:'#e9e6dd'}}), 'לא רלוונטי'), h('span',null, h('i',{style:{background:'var(--info)',borderRadius:'50%',width:'7px',height:'7px'}}), 'יש הערה'), h('span',{title:'יותר מיום בין הורדת התנסות לאישור תוכניות, או יותר מ-4 ימים בין אישור תוכניות למשוב'}, h('i',{style:{background:'#f6d3cc'}}), 'חריגה מזמנים'),
+      h('div',{class:'legend'}, h('span',null, h('i',{style:{background:'#d5eedd'}}), 'בוצע'), h('span',null, h('i',{style:{background:'var(--accent-soft)'}}), 'מתוכנן'), h('span',null, h('i',{style:{background:'#fff',border:'1px solid var(--line)'}}), 'טרם בוצע'), h('span',null, h('i',{style:{background:'#e9e6dd'}}), 'לא רלוונטי'), h('span',null, h('i',{style:{background:'var(--info)',borderRadius:'50%',width:'7px',height:'7px'}}), 'יש הערה'),
         h('span',{style:{color:'var(--line)'}},'|'),
         EXP_TYPES.map(ty => h('span',null, h('i',{style:{background:ty.color}}), ty.label))),
       h('span',{class:'muted xs',style:{marginInlineStart:'auto'}}, editable ? 'לחצו על תא כדי לעדכן' : 'צפייה בלבד — רק המפק״ץ, המ״פ שלו או מנהל יכולים לעדכן')),
@@ -2203,8 +2266,8 @@ function expModal(c, g, editable){
     save.disabled = false;
   });
 }
-// חריגה מזמנים: יותר מיום בין הורדת התנסות לאישור תוכניות, ויותר מ-4 ימים בין אישור תוכניות למשוב
-const DELAY_RULES = { plan:{ prev:'exp', lim:1, label:'מהורדת ההתנסות לאישור התוכניות' }, fb:{ prev:'plan', lim:4, label:'מאישור התוכניות למשוב' } };
+// סימון חריגה מזמנים בוטל לבקשת הסגל (אין צביעה באדום לפי זמן)
+const DELAY_RULES = {};
 function delayOf(c, evId){
   const g = EXP_GROUP_OF[evId]; if(!g) return null;
   const kind = evId.replace(/\d+$/,''), r = DELAY_RULES[kind]; if(!r) return null;
@@ -2458,6 +2521,12 @@ function tkfSetDone(c, s, done){
   }
   return act(S.db.doc('cadets/'+c.id).update({ tkf:{ slots:{ [s.id]: Object.assign(stripId(s), { done }) } } }), done ? 'סומן כבוצע ✓' : null);
 }
+function tkfEditSlot(c, s, text, type){
+  const upd = { tkf:{ slots:{ [s.id]: Object.assign(stripId(s), { text, type, by:S.me.id, at:Date.now() }) } } };
+  if(s.n && ((c.exps || {})[s.n] || {}).tkf === s.id) upd.exps = { [s.n]: Object.assign({}, c.exps[s.n], { text, type, by:S.me.id, at:Date.now() }) };
+  const moved = tkfRowOf(type) !== tkfRowOf(s.type);
+  return act(S.db.doc('cadets/'+c.id).update(upd), moved ? `עודכן — עבר לשורת ה${TKF_ROWS.find(r=>r.id===tkfRowOf(type)).label}` : 'עודכן');
+}
 function tkfSetRange(c, s, week, end){
   if(end < week) end = week;
   return act(S.db.doc('cadets/'+c.id).update({ tkf:{ slots:{ [s.id]: Object.assign(stripId(s), { week, end }) } } }), 'עודכן ל' + rangeLabel(week, end));
@@ -2487,7 +2556,7 @@ async function tkfMove(list, i, d){
 
 function tkfView(){
   const f = UI.ment, mentor = f.mentor, editable = canEditCadets(mentor);
-  const T = UI.tk || (UI.tk = { sel:null, q:'', hideTaken:false, drag:null });
+  const T = UI.tk || (UI.tk = { sel:null, q:'', hideTaken:false, drag:null, big:(() => { try { return localStorage.getItem('tkBig')==='1'; } catch(_){ return false; } })() });
   const cadets = teamCadets(mentor);
   const CAT = tkfCatMap();
   const taken = tkfTaken(cadets);
@@ -2530,7 +2599,7 @@ function tkfView(){
     TKF_WEEKS.map(w => { const d = dw[w.n];
       return h('th',{class: w.n===curN ? 'curwk' : ''}, h('span',{class:'wk-sub'}, 'שבוע ' + w.n + (w.n===curN ? ' · השבוע' : '')), w.name,
         d && d.dates ? h('span',{class:'wk-sub'}, `${d.dates['ראשון']||''}–${d.dates['שבת']||''}`) : null); }),
-    h('th',{style:{minWidth:'50px'}}, 'כמות'));
+    h('th',{class:'cntcol',style:{minWidth:'50px'}}, 'כמות'));
   const body = per.map((p, pi) => {
     const tier = TKF_TIERS[tierOf(pi, per.length)];
     return TKF_ROWS.map((row, ri) => {
@@ -2571,18 +2640,19 @@ function tkfView(){
       h('h2',null, icon('grad'), 'התקפ״ץ של'), mentorSel,
       h('div',{class:'ph-actions'},
         h('span',{class:'tag'}, `${cadets.length} צוערים`),
+        h('button',{class:'btn ghost sm',title:'גודל התצוגה של הטבלה',onclick:()=>{ T.big = !T.big; try { localStorage.setItem('tkBig', T.big?'1':'0'); } catch(_){} render(); }}, icon('search',15), T.big ? 'תצוגה מוקטנת' : 'הגדלת התצוגה'),
         h('button',{class:'btn ghost sm',onclick:()=>{ T.hidePal = !T.hidePal; render(); }}, icon('list',15), T.hidePal ? 'הצגת המאגר' : 'הסתרת המאגר'),
         S.downloads && cadets.length ? h('button',{class:'btn ghost sm',onclick:()=>tkfExport(mentor, per)}, icon('dl',15),'ייצוא לאקסל') : null,
         editable ? h('button',{class:'btn primary sm',onclick:()=>cadetModal(null)}, icon('plus',15),'הוספת צוערים') : null)),
-    cadets.length ? h('div',{class:'card-body',style:{paddingBottom:'4px'}}, h('div',{class:'stats',style:{marginTop:0}},
+    cadets.length ? h('div',{class:'card-body' + (T.big ? '' : ' tk-compact-stats'),style:{paddingBottom:'4px'}}, h('div',{class:'stats',style:{marginTop:0}},
       h('div',{class:'stat'}, h('b',{style:{color: okBoth===cadets.length ? 'var(--ok)' : 'var(--danger)'}}, `${okBoth}/${cadets.length}`), h('span',null,'צוערים עם פיקודית + הדרכתית')),
       h('div',{class:'stat'}, h('b',null, nAll), h('span',null,'התנסויות ומשימות משובצות')),
       h('div',{class:'stat'}, h('b',{style:{color:'var(--ok)'}}, nDone), h('span',null,'ירדו (סומנו)')),
       h('div',{class:'stat'}, h('b',{style:{color: nPast ? 'var(--warn)' : ''}}, nPast), h('span',null,'הזמן עבר — טרם סומנו')))) : null,
-    h('div',{class:'toolbar',style:{fontSize:'13px'}}, legend,
+    h('div',{class:'toolbar' + (T.big ? '' : ' tk-compact-bar'),style:{fontSize:'13px'}}, legend,
       h('span',{class:'muted xs',style:{marginInlineStart:'auto'}}, editable ? 'בחרו התנסות מהמאגר ולחצו על תא מסומן (או גררו) · לחיצה על תא פותחת אותו · החיצים ליד השם קובעים את סדר החשיבות' : 'צפייה בלבד')),
     cadets.length
-      ? h('div',{class:'tk-wrap'}, h('table',{class:'tkgrid'}, h('thead',null,head), h('tbody',null,body), h('tfoot',null,foot)))
+      ? h('div',{class:'tk-wrap' + (T.big ? '' : ' compact')}, h('table',{class:'tkgrid'}, h('thead',null,head), h('tbody',null,body), h('tfoot',null,foot)))
       : empty(editable ? 'עדיין לא הוגדרו צוערים — לחצו ״הוספת צוערים״ (אותה רשימה כמו בטבלת החניכה)' : 'לא הוגדרו צוערים למפק״ץ זה','grad'));
 
   const selBar = selItem ? h('div',{class:'banner info tk-selbar',style:{alignItems:'center'}}, icon('flag'),
@@ -2652,14 +2722,22 @@ function tkfCellModal(c, row, wn, editable){
     const w1 = weekSel(a, b, s.week, { disabled:fixed }), w2 = weekSel(a, b, s.end, { disabled:fixed });
     const onCh = async () => { let x = +w1.value, y = +w2.value; if(y < x) y = x; if(await tkfSetRange(c, s, x, y)) close(); };
     w1.addEventListener('change', onCh); w2.addEventListener('change', onCh);
-    return h('div',{class:'tk-slot'},
+    // עריכה ידנית: שם וסוג (למשל הדרכתית ← צח״ץ)
+    const eTxt = inp(s.text || '', 'שם ההתנסות'), eType = sel(EXP_TYPES.map(t => ({ value:t.id, label:t.label })), s.type, { style:{width:'auto'} });
+    const eSave = h('button',{class:'btn primary sm',type:'button'}, 'שמירה');
+    const editRow = h('div',{style:{display:'none',gap:'8px',alignItems:'center',flexWrap:'wrap',width:'100%',paddingTop:'6px'}},
+      h('div',{style:{flex:1,minWidth:'180px'}}, eTxt), eType, eSave, h('button',{class:'btn ghost sm',type:'button',onclick:()=>{ editRow.style.display='none'; }}, 'ביטול'));
+    eSave.addEventListener('click', async () => { const t = eTxt.value.trim(); if(!t) return toast('נא למלא שם','err'); eSave.disabled = true; if(await tkfEditSlot(c, s, t, eType.value)) close(); eSave.disabled = false; });
+    return h('div',{class:'tk-slot',style:{flexWrap:'wrap'}},
       doneBox(st==='done', !editable, async v => { if(await tkfSetDone(c, s, v)) close(); }),
       h('span',{class:'xtype',style:{background:ty.color}}, ty.label),
       h('b',{style:{flex:1,minWidth:'120px'}}, s.text),
       h('span',{class:'tag '+(TKF_ST_TAG[st]||'')}, TKF_ST[st]),
       h('span',{class:'xs muted'}, s.n ? 'התנסות ' + s.n + ' בטבלת החניכה' : 'לא מקושר לטבלת החניכה'),
       h('span',{style:{display:'inline-flex',gap:'4px',alignItems:'center',fontSize:'13px'}}, 'מ', w1, 'עד', w2),
-      editable ? h('button',{class:'icon-btn danger',title:'הסרת השיבוץ',onclick:async()=>{ if(await tkfRemove(c, s)) close(); }}, icon('trash',16)) : null);
+      editable ? h('button',{class:'icon-btn',title:'עריכת שם וסוג',onclick:()=>{ editRow.style.display = editRow.style.display==='none' ? 'flex' : 'none'; if(editRow.style.display==='flex') eTxt.focus(); }}, icon('edit',16)) : null,
+      editable ? h('button',{class:'icon-btn danger',title:'הסרת השיבוץ',onclick:async()=>{ if(await tkfRemove(c, s)) close(); }}, icon('trash',16)) : null,
+      editable ? editRow : null);
   };
   const avail = tkfCatalog().filter(it => tkfRowOf(it.type)===row.id && itemWeeks(it).includes(wn) && !taken[it.id]);
   const availEl = avail.length ? h('div',{class:'tk-opts'}, avail.map(it => { const [a,b] = itemRange(it);
@@ -2721,11 +2799,29 @@ function tkfGoalModal(c, editable){
 
 function tkfCatalogModal(){
   const items = tkfCatalog().map(x => Object.assign({}, x));
+  const orig = Object.fromEntries(items.map(x => [x.id, { label:x.label, type:x.type }]));
   const list = h('div');
+  let editing = null;
+  const editForm = (it, i) => {
+    const l = inp(it.label, 'שם ההתנסות'), t = sel(EXP_TYPES.map(x => ({ value:x.id, label:x.label })), it.type, { style:{width:'auto'} });
+    const sc = sel(TKF_SCOPES.map(x => ({ value:x.id, label:x.label })), it.scope || 'team', { style:{width:'auto'} });
+    const [a0, b0] = itemRange(it); const f = weekSel(1, 8, a0), tt = weekSel(1, 8, b0);
+    const nt = inp(it.note || '', 'הערה (לא חובה)');
+    const ok = h('button',{class:'btn primary sm',type:'button'}, 'עדכון');
+    ok.addEventListener('click', () => { const v = l.value.trim(); if(!v) return toast('נא למלא שם','err');
+      const a = +f.value, b = Math.max(a, +tt.value);
+      items[i] = Object.assign({}, it, { label:v, type:t.value, scope:sc.value, from:a, to:b, half:(a===it.from && b===it.to) ? (it.half||'') : '', note:nt.value.trim() });
+      if(t.value !== 'cmd') delete items[i].mms;
+      editing = null; draw(); });
+    return h('div',{class:'tk-cat-row',style:{flexWrap:'wrap',background:'var(--soft)',padding:'8px',borderRadius:'8px'}},
+      h('div',{style:{flex:'1 1 200px'}}, l), t, sc, h('span',{class:'small muted'},'משבוע'), f, h('span',{class:'small muted'},'עד'), tt,
+      h('div',{style:{flex:'1 1 160px'}}, nt), ok, h('button',{class:'btn ghost sm',type:'button',onclick:()=>{ editing = null; draw(); }}, 'ביטול'));
+  };
   const metaOf = it => { const [a,b] = itemRange(it); return [expTy(it.type).label, it.mms ? 'ממ״ש' : it.type==='teach' ? '' : TKF_SCOPE_LABEL[it.scope||'team'], rangeLabel(a,b), it.note].filter(Boolean).join(' · '); };
-  const draw = () => list.replaceChildren(...items.map((it, i) => h('div',{class:'tk-cat-row'},
+  const draw = () => list.replaceChildren(...items.map((it, i) => editing===it.id ? editForm(it, i) : h('div',{class:'tk-cat-row'},
     h('i',{style:{width:'10px',height:'10px',borderRadius:'3px',background:expTy(it.type).color,display:'inline-block',flex:'none'}}),
     h('b',{style:{flex:1}}, it.label), h('span',{class:'xs muted'}, metaOf(it)),
+    h('button',{class:'icon-btn',type:'button',title:'עריכה (שם, סוג, רוחב, שבועות)',onclick:()=>{ editing = it.id; draw(); }}, icon('edit',15)),
     h('button',{class:'icon-btn danger',type:'button',title:'הסרה',onclick:()=>{ items.splice(i,1); draw(); }}, icon('trash',15)))));
   draw();
   const label = inp('', 'שם ההתנסות');
@@ -2744,7 +2840,26 @@ function tkfCatalogModal(){
       h('div',{style:{maxHeight:'46vh',overflow:'auto',border:'1px solid var(--line)',borderRadius:'10px',padding:'4px 12px'}}, list),
       h('div',{style:{display:'flex',gap:'8px',flexWrap:'wrap',marginTop:'12px',alignItems:'center'}}, label, type, scope, h('span',{class:'small muted'},'משבוע'), from, h('span',{class:'small muted'},'עד'), to, add)),
     footer:[ save, h('button',{class:'btn ghost',onclick:()=>close()},'ביטול'), reset ] });
-  save.addEventListener('click', async () => { save.disabled = true; if(await act(S.db.doc('tkf/catalog').set({ items, updatedAt:Date.now(), updatedBy:S.me.id }), 'המאגר נשמר')) close(); save.disabled = false; });
+  save.addEventListener('click', async () => {
+    save.disabled = true;
+    if(!(await act(S.db.doc('tkf/catalog').set({ items, updatedAt:Date.now(), updatedBy:S.me.id }), 'המאגר נשמר'))){ save.disabled = false; return; }
+    // שיבוצים קיימים של פריטים שהשם או הסוג שלהם תוקנו — מתעדכנים גם הם
+    const changed = Object.fromEntries(items.filter(x => orig[x.id] && (orig[x.id].label !== x.label || orig[x.id].type !== x.type)).map(x => [x.id, x]));
+    if(Object.keys(changed).length){
+      let n = 0;
+      for(const c of S.cadets){
+        const upd = {};
+        tkfSlots(c).forEach(sl => { const it = sl.item && changed[sl.item]; if(!it) return;
+          const text = itemLabel(it), type = it.type;
+          (upd.tkf = upd.tkf || { slots:{} }).slots[sl.id] = Object.assign(stripId(sl), { text, type });
+          if(sl.n && ((c.exps||{})[sl.n]||{}).tkf === sl.id) (upd.exps = upd.exps || {})[sl.n] = Object.assign({}, c.exps[sl.n], { text, type });
+          n++; });
+        if(upd.tkf){ try { await S.db.doc('cadets/'+c.id).update(upd); } catch(e){ console.warn(e); } }
+      }
+      if(n) toast(`עודכנו גם ${n} שיבוצים קיימים`);
+    }
+    close();
+  });
   reset.addEventListener('click', async () => { if(!(await confirmDialog('שחזור ברירת מחדל','להחזיר את המאגר לתבנית המקורית של אלון 6?','שחזור'))) return; items.splice(0, items.length, ...TKF_DEFAULT.map(x => Object.assign({}, x))); draw(); });
 }
 
