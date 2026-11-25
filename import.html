@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ייבוא נתונים · סגל אלון</title>
+<style>
+body{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;background:#f3f1ea;color:#1c2620;margin:0;padding:30px 16px;line-height:1.55}
+.box{max-width:620px;margin:0 auto;background:#fff;border:1px solid #e3e0d5;border-radius:16px;padding:24px}
+h1{margin:0 0 6px;font-size:22px}
+p{color:#4a554c}
+button,label.btn{display:inline-block;background:#2c5f45;color:#fff;border:0;border-radius:10px;padding:10px 16px;font:inherit;font-weight:700;cursor:pointer}
+button:disabled{opacity:.5;cursor:default}
+.ghost{background:#fff;color:#1c2620;border:1px solid #e3e0d5}
+#log{background:#f7f5ef;border-radius:10px;padding:12px;font-size:14px;white-space:pre-wrap;min-height:40px;margin-top:16px}
+.ok{color:#2b7a4b;font-weight:700}.err{color:#b23c2c;font-weight:700}
+.step{margin:18px 0 0}
+</style>
+<script src="firebase-config.js"></script>
+</head>
+<body>
+<div class="box">
+  <h1>ייבוא נתונים לאתר</h1>
+  <p>עמוד חד-פעמי: טוען את קובץ הנתונים שיוצא מהאתר הקודם (״ייצוא כל הנתונים״) אל מסד הנתונים החדש. רק בעלי האתר (המיילים שב-firebase-config.js) יכולים לייבא.</p>
+  <div class="step"><button id="signin">1. כניסה עם Google</button> <span id="who"></span></div>
+  <div class="step"><label class="btn ghost" id="pickLbl">2. בחירת קובץ הנתונים (.json)<input type="file" id="file" accept=".json,application/json" hidden></label> <span id="fname"></span></div>
+  <div class="step"><button id="go" disabled>3. ייבוא</button></div>
+  <div id="log">ממתין…</div>
+  <p style="margin-top:18px">בסיום — חזרו לאתר: <a href="./">לדף הראשי</a>. אם מייבאים שוב, רשומות קיימות עם אותו מזהה יוחלפו; שום דבר לא נמחק.</p>
+</div>
+<script type="module">
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
+import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
+import { initializeFirestore, doc, getDoc, writeBatch } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
+const CFG = window.APP_CONFIG || {};
+const $ = id => document.getElementById(id);
+const log = (t, cls) => { const d = document.createElement('div'); if(cls) d.className = cls; d.textContent = t; $('log').append(d); };
+$('log').textContent = '';
+if(!CFG.firebase || CFG.firebase.apiKey === 'PASTE_HERE'){ log('קודם צריך למלא את firebase-config.js.', 'err'); throw 0; }
+const app = initializeApp(CFG.firebase), auth = getAuth(app), fs = initializeFirestore(app, { ignoreUndefinedProperties:true });
+const owners = (CFG.ownerEmails||[]).map(e => e.toLowerCase());
+let user = null, data = null;
+const refresh = () => { $('go').disabled = !(user && data); };
+$('signin').onclick = () => signInWithPopup(auth, new GoogleAuthProvider()).catch(e => log('ההתחברות נכשלה: ' + e.code, 'err'));
+onAuthStateChanged(auth, u => {
+  user = u; $('who').textContent = u ? u.email : '';
+  if(u && !owners.includes(u.email.toLowerCase())) log('שימו לב: ' + u.email + ' לא ברשימת בעלי האתר — הייבוא ייחסם.', 'err');
+  refresh();
+});
+$('file').onchange = async () => {
+  const f = $('file').files[0]; if(!f) return;
+  try {
+    const j = JSON.parse(await f.text());
+    if(!j || !j.collections) throw new Error('זה לא קובץ ייצוא של האתר');
+    data = j; $('fname').textContent = f.name;
+    const n = Object.entries(j.collections).map(([c, d]) => c + ': ' + Object.keys(d).length).join(' · ');
+    log('נקרא קובץ מ-' + (j.exportedAt || '?') + '\n' + n);
+  } catch(e){ data = null; log('לא ניתן לקרוא את הקובץ: ' + e.message, 'err'); }
+  refresh();
+};
+$('go').onclick = async () => {
+  $('go').disabled = true;
+  try {
+    const ops = [];
+    for(const [coll, docs] of Object.entries(data.collections))
+      for(const [id, body] of Object.entries(docs)) ops.push([coll + '/' + id, body]);
+    // אינדקס מיילים לאנשי הסגל, וניקוי כרטיס כפול שנוצר אם בעל האתר נכנס לפני הייבוא
+    const members = data.collections.members || {};
+    const missing = [];
+    for(const [id, m] of Object.entries(members)){
+      const e = String(m.email||'').trim().toLowerCase();
+      if(!e){ missing.push(m.name || id); continue; }
+      const prev = await getDoc(doc(fs, 'emails', e));
+      if(prev.exists() && prev.data().appId !== id && !members[prev.data().appId]) ops.push(['DELETE members/' + prev.data().appId, null]);
+      ops.push(['emails/' + e, { appId:id }]);
+    }
+    let done = 0;
+    for(let i = 0; i < ops.length; i += 400){
+      const b = writeBatch(fs);
+      ops.slice(i, i + 400).forEach(([p, body]) => p.startsWith('DELETE ') ? b.delete(doc(fs, p.slice(7))) : b.set(doc(fs, p), body));
+      await b.commit(); done += Math.min(400, ops.length - i);
+      log('נכתבו ' + done + ' מתוך ' + ops.length);
+    }
+    log('✓ הייבוא הושלם.', 'ok');
+    if(missing.length) log('לאנשי הסגל האלה אין מייל בכרטיס, ולכן הם עוד לא יוכלו להיכנס. הוסיפו להם Gmail בלשונית ״אנשי סגל״:\n• ' + missing.join('\n• '), 'err');
+  } catch(e){ console.error(e); log('הייבוא נכשל: ' + (e.code || e.message) + (e.code === 'permission-denied' ? ' — ודאו שהתחברתם עם מייל של בעל האתר ושכללי האבטחה פורסמו.' : ''), 'err'); $('go').disabled = false; }
+};
+</script>
+</body>
+</html>

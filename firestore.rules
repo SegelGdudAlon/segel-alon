@@ -1,0 +1,45 @@
+rules_version = '2';
+// כללי אבטחה לאתר "סגל אלון לא יכרע ברוח".
+// מעתיקים את כל הקובץ ל-Firebase ← Firestore Database ← Rules ← Publish.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===== בעלי האתר — אותה רשימה כמו ב-firebase-config.js =====
+    function ownerEmails() { return ['romegido@gmail.com', 'segelgdudalon@gmail.com']; }
+
+    function signedIn() { return request.auth != null && request.auth.token.email_verified == true; }
+    function em() { return request.auth.token.email.lower(); }
+    function isOwner() { return signedIn() && em() in ownerEmails(); }
+    function emailDoc() { return /databases/$(database)/documents/emails/$(em()); }
+    // מזהה איש הסגל: לפי המייל שאיתו התחבר (אינדקס emails), אחרת מזהה החשבון
+    function appId() { return exists(emailDoc()) ? get(emailDoc()).data.appId : request.auth.uid; }
+    function memberDoc() { return /databases/$(database)/documents/members/$(appId()); }
+    function isMember() { return signedIn() && (isOwner() || exists(memberDoc())); }
+    function isAdmin() { return isOwner() || (isMember() && get(memberDoc()).data.role == 'admin'); }
+
+    // אינדקס מייל ← איש סגל
+    match /emails/{e} {
+      allow get: if signedIn() && e == em();
+      allow read, write: if isMember();
+    }
+    // כרטיסי אנשי סגל: כל איש סגל יכול להוסיף ולעדכן, רק מנהל מוחק
+    match /members/{id} {
+      allow get: if signedIn() && id == appId();
+      allow list, create, update: if isMember();
+      allow delete: if isAdmin();
+    }
+    // בקשות הצטרפות: כל מחובר מנהל את הבקשה של עצמו; אנשי סגל רואים ומטפלים בכולן
+    match /requests/{id} {
+      allow get, create, update, delete: if signedIn() && id == appId();
+      allow list, delete: if isMember();
+    }
+    // רשימת הפלוגות — גלויה גם למי שממלא בקשת הצטרפות
+    match /app/config {
+      allow get: if signedIn();
+    }
+    // כל שאר הנתונים — אנשי סגל בלבד
+    match /{coll}/{rest=**} {
+      allow read, write: if isMember() && !(coll in ['members', 'requests', 'emails']);
+    }
+  }
+}
