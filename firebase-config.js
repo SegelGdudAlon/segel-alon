@@ -9,7 +9,8 @@ window.APP_CONFIG = {
     projectId: "segel-alon",
     storageBucket: "segel-alon.firebasestorage.app",
     messagingSenderId: "604320639422",
-    appId: "1:604320639422:web:f98e3f43f2b95b6eb5b1ef"
+    appId: "1:604320639422:web:f98e3f43f2b95b6eb5b1ef",
+    sheetsApiKey: "AIzaSyCXowkgF6e6ubir6ZndegxlgLLQRC_12LQ"
   },
 
   // 2) מיילים של "בעלי האתר" — תמיד מנהלים, גם אם משהו השתבש בהרשאות.
