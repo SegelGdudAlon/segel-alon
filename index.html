@@ -2179,8 +2179,10 @@ function mentoringView(){
   return h('div',null,
     arcBanner(),
     pageHead(h('span',null,'מעקב חניכה ', h('span',{class:'tag accent',style:{fontSize:'15px',padding:'3px 12px'}}, cohortName(viewCohortId()))),'מופעי חניכה לכל צוער, תיק פיתוח צוותי (תקפ״ץ), נגזרות הדרכה שבועיות, ובקרה פלוגתית וגדודית.',
-      segmented([{id:'table',label:'טבלת חניכה'},{id:'tkf',label:'תקפ״ץ'},{id:'deriv',label:'נגזרות הדרכה'},{id:'control',label:'בקרת חניכה'}], f.tab, v=>{ f.tab=v; render(); })),
-    f.tab==='control' ? mentorControl() : f.tab==='tkf' ? tkfView() : f.tab==='deriv' ? derivView() : mentorTable());
+      segmented([{id:'table',label:'טבלת חניכה'},{id:'tkf',label:'תקפ״ץ'},{id:'deriv',label:'נגזרות הדרכה'}], f.tab, v=>{ f.tab=v; render(); })),
+    f.tab==='tkf' ? tkfView() : f.tab==='deriv' ? derivView() : h('div',null, mentorTable(),
+      h('h2',{id:'ment-control',style:{display:'flex',alignItems:'center',gap:'8px',margin:'26px 2px 12px',fontSize:'20px'}}, icon('grad'), 'בקרת חניכה'),
+      mentorControl()));
 }
 function mentorTable(){
   const f = UI.ment, mentor = f.mentor, editable = canEditCadets(mentor);
@@ -2595,7 +2597,7 @@ function tkfView(){
   const dot = (c, n) => { const st = cellOf(c, 'exp'+n).status || 'none'; const x = expOf(c, n);
     return h('i',{class:st, title:`התנסות ${n} בטבלת החניכה: ${x.text || 'לא צוין'} · ${(M_STATUS.find(s=>s.id===st)||{}).label}`}); };
   const head = h('tr',null,
-    h('th',{class:'namecol'}, 'שם הצוער', h('span',{class:'wk-sub'}, 'לפי סדר חשיבות')), h('th',{class:'goalcol'}, 'יעדים אישיים'), h('th',{class:'typecol'}, 'סוג'),
+    h('th',{class:'namecol'}, 'שם הצוער', h('span',{class:'wk-sub'}, 'לפי סדר חשיבות')), h('th',{class:'typecol'}, 'סוג'),
     TKF_WEEKS.map(w => { const d = dw[w.n];
       return h('th',{class: w.n===curN ? 'curwk' : ''}, h('span',{class:'wk-sub'}, 'שבוע ' + w.n + (w.n===curN ? ' · השבוע' : '')), w.name,
         d && d.dates ? h('span',{class:'wk-sub'}, `${d.dates['ראשון']||''}–${d.dates['שבת']||''}`) : null); }),
@@ -2617,14 +2619,12 @@ function tkfView(){
               h('button',{class:'icon-btn',title:'הזזה למטה',disabled:pi===per.length-1,onclick:()=>tkfMove(cadets, pi, 1)}, icon('down',14))) : null),
           h('div',{class:'tk-req'}, h('span',{class:p.cmd?'y':'n'}, (p.cmd?'✓':'✗') + ' פיקודית'), h('span',{class:p.teach?'y':'n'}, (p.teach?'✓':'✗') + ' הדרכתית')),
           h('div',{class:'tk-dots'}, 'חניכה:', [1,2,3].map(n => dot(p.c, n)))) : null,
-        ri===0 ? h('td',{class:'goalcol', rowspan:TKF_ROWS.length},
-          h('div',{class:'tk-goal' + (editable ? '' : ' ro'), onclick:()=>tkfGoalModal(p.c, editable)}, g || h('span',{class:'ph'}, editable ? 'לחצו להוספת יעדים' : '—'))) : null,
         h('td',{class:'typecol', style:{color:ty.color, background:ty.soft}}, row.label),
         TKF_WEEKS.map(w => h('td',{class: w.n===curN ? 'curwk' : ''}, cellFor(p.c, row, w.n, rowSlots, lay))),
         h('td',{class:'tk-cnt' + (!rowSlots.length && row.id!=='other' ? ' zero' : '')}, rowSlots.length));
     });
   });
-  const foot = h('tr',null, h('td',{class:'namecol'}, 'סה״כ'), h('td',null,''), h('td',null,''),
+  const foot = h('tr',null, h('td',{class:'namecol'}, 'סה״כ'), h('td',null,''),
     TKF_WEEKS.map(w => h('td',null, per.reduce((a,p) => a + p.ss.filter(s => s.week <= w.n && w.n <= s.end).length, 0) || '—')),
     h('td',null, nAll));
 
@@ -2865,10 +2865,10 @@ function tkfCatalogModal(){
 
 async function tkfExport(mentor, per){
   const q = v => '"' + String(v == null ? '' : v).replace(/"/g,'""') + '"';
-  const rows = [ ['#','שם הצוער','יעדים אישיים','סוג', ...TKF_WEEKS.map(w => w.name), 'כמות'], ['','','','', ...TKF_WEEKS.map(w => w.n), ''] ];
+  const rows = [ ['#','שם הצוער','סוג', ...TKF_WEEKS.map(w => w.name), 'כמות'], ['','','', ...TKF_WEEKS.map(w => w.n), ''] ];
   per.forEach((p, pi) => TKF_ROWS.forEach((row, ri) => {
     const ss = p.ss.filter(s => tkfRowOf(s.type)===row.id);
-    rows.push([ ri===0 ? pi+1 : '', ri===0 ? p.c.name : '', ri===0 ? ((p.c.tkf||{}).goals || '') : '', row.label,
+    rows.push([ ri===0 ? pi+1 : '', ri===0 ? p.c.name : '', row.label,
       ...TKF_WEEKS.map(w => ss.filter(s => s.week <= w.n && w.n <= s.end).map(s => s.text).join(' / ')), ss.length ]);
   }));
   const csv = '﻿' + rows.map(r => r.map(q).join(',')).join('\r\n');
@@ -2989,7 +2989,7 @@ function archiveView(){
       h('div',{class:'ph-actions'},
         h('button',{class:'btn primary sm',onclick:()=>{ UI.arc = co.id; UI.ment.tab = 'tkf'; UI.tk && (UI.tk.sel = null); go('mentoring'); }}, icon('eye',15),'תקפ״ץ'),
         h('button',{class:'btn ghost sm',onclick:()=>{ UI.arc = co.id; UI.ment.tab = 'table'; go('mentoring'); }},'מעקב חניכה'),
-        h('button',{class:'btn ghost sm',onclick:()=>{ UI.arc = co.id; UI.ment.tab = 'control'; go('mentoring'); }},'בקרה'))); };
+        h('button',{class:'btn ghost sm',onclick:()=>{ UI.arc = co.id; UI.ment.tab = 'table'; go('mentoring'); setTimeout(() => { const el = document.getElementById('ment-control'); if(el) el.scrollIntoView({ behavior:'smooth', block:'start' }); }, 250); }},'בקרה'))); };
   return h('div',null,
     pageHead('ארכיון מחזורים','שימור ידע — מצב מעקב החניכה, התקפ״ץ והנגזרות של כל מחזור שהסתיים.',
       isAdmin() ? [ h('button',{class:'btn ghost',onclick:()=>cohortEditModal(cur)}, icon('edit',16),'הגדרות המחזור הנוכחי'), h('button',{class:'btn danger',onclick:archiveModal}, icon('folder',16),'סיום מחזור והעברה לארכיון') ] : null),
