@@ -300,6 +300,7 @@ table.mgrid{border-collapse:separate;border-spacing:0;font-size:13px;min-width:1
 .mgrid thead th.namecol{z-index:3;background:var(--soft)}
 .mgrid tfoot td{position:sticky;bottom:0;background:var(--soft);font-size:12px;text-align:center;padding:6px;font-weight:700;color:var(--muted)}
 .mgrid tfoot td.namecol{background:var(--soft)}
+.mcell,.tk-chip,.tk-cell{-webkit-user-select:none;user-select:none}
 .mcell{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;min-height:52px;width:100%;border:0;background:#fff;cursor:pointer;padding:4px 6px;font:inherit;font-size:12px;color:var(--muted);text-align:center}
 .mcell:hover{outline:2px solid var(--brand-2);outline-offset:-2px}
 .mcell.done{background:#d5eedd;color:#1d5c37}
@@ -2327,12 +2328,21 @@ function delayOf(c, evId){
   const d = Math.round((parseLocal(end) - parseLocal(p.date)) / 864e5);
   return d > r.lim ? { days:d, lim:r.lim, done:x.status==='done', label:r.label } : null;
 }
+// לחיצה רגילה מחכה רגע, כדי שדאבל קליק לא יפתח גם את החלון
+let CLICK_T = null;
+const delayClick = fn => e => { if(e && e.detail > 1) return; clearTimeout(CLICK_T); CLICK_T = setTimeout(() => { CLICK_T = null; fn(e); }, 230); };
+const dblDo = fn => e => { clearTimeout(CLICK_T); CLICK_T = null; if(e){ e.preventDefault(); e.stopPropagation(); } fn(e); };
+function quickDone(c, evId){
+  const x = cellOf(c, evId), done = x.status === 'done';
+  const cell = Object.assign({}, x, { status: done ? 'none' : 'done', by:S.me.id, at:Date.now() });
+  return act(S.db.doc('cadets/'+c.id).update({ cells:{ [evId]: cell } }), done ? 'הסימון ״בוצע״ בוטל' : 'סומן כבוצע ✓');
+}
 function mCell(c, ev, editable){
   const x = cellOf(c, ev.id), st = x.status || 'none';
   const small = !!EXP_GROUP_OF[ev.id];
   const late = delayOf(c, ev.id);
   const lbl = { done: small ? '✓' : '✓ בוצע', planned:'מתוכנן', na:'ל״ר' }[st];
-  return h('button',{class:'mcell '+st+(late?' late':''), title:[ev.label, M_STATUS.find(s=>s.id===st).label, x.date?fmtDate(x.date):'', late ? `חריגה: ${late.days} ימים ${late.label} (מותר עד ${late.lim})` : '', x.notes].filter(Boolean).join('\n'), onclick:()=>cellModal(c, ev, editable)},
+  return h('button',{class:'mcell '+st+(late?' late':''), title:[ev.label, M_STATUS.find(s=>s.id===st).label, x.date?fmtDate(x.date):'', late ? `חריגה: ${late.days} ימים ${late.label} (מותר עד ${late.lim})` : '', x.notes, editable ? 'דאבל קליק: סימון כבוצע' : ''].filter(Boolean).join('\n'), onclick:delayClick(()=>cellModal(c, ev, editable)), ondblclick: editable ? dblDo(()=>quickDone(c, ev.id)) : null},
     lbl ? h('b',null,lbl) : h('span',null,'—'),
     late ? h('span',{class:'lt'}, (late.done ? 'באיחור · ' : 'חריגה · ') + late.days + ' ימים') : null,
     x.date ? h('span',null, fmtDate(x.date)) : null,
@@ -2588,11 +2598,15 @@ function laneLayout(slots){
   sorted.forEach(s => { let i = ends.findIndex(e => e < s.week); if(i < 0){ i = ends.length; ends.push(0); } ends[i] = s.end; lane[s.id] = i; });
   return { lane, n: ends.length };
 }
-function tkfSeg(c, s, wn, curN){
+function tkfSeg(c, s, wn, curN, editable){
   const st = tkfStatus(c, s, curN), ty = expTy(s.type), multi = s.end > s.week, first = wn===s.week, last = wn===s.end;
   const mark = { done:'✓', past:'?', now:'●', planned:'◔', na:'–' }[st];
   return h('span',{class:'tk-chip '+st+(multi?' multi':'')+(first?' first':'')+(last?' last':''), style:{'--tc':ty.color,'--ts':ty.soft},
-      title:`${ty.label} · ${s.text}\n${rangeLabel(s.week, s.end)} · ${TKF_ST[st]}` + (s.n ? `\nהתנסות ${s.n} בטבלת החניכה` : '')},
+      title:`${ty.label} · ${s.text}\n${rangeLabel(s.week, s.end)} · ${TKF_ST[st]}` + (s.n ? `\nהתנסות ${s.n} בטבלת החניכה` : '') + (editable ? '\nדאבל קליק: סימון כבוצע' : ''),
+      ondblclick: editable ? dblDo(() => {
+        if(s.n) return quickDone(c, 'exp'+s.n);
+        return act(S.db.doc('cadets/'+c.id).update({ tkf:{ slots:{ [s.id]: Object.assign(stripId(s), { done: !s.done }) } } }), s.done ? 'הסימון ״בוצע״ בוטל' : 'סומן כבוצע ✓');
+      }) : null},
     first ? [ mark ? h('span',{class:'st'}, mark) : null, h('span',{class:'tx'}, s.text) ] : null);
 }
 function tierOf(i, n){ return n ? Math.min(2, Math.floor(i * 3 / n)) : 0; }
@@ -2628,14 +2642,14 @@ function tkfView(){
     const lanes = [];
     for(let i = 0; i < lay.n; i++){
       const s = rowSlots.find(x => lay.lane[x.id]===i && x.week <= wn && wn <= x.end);
-      lanes.push(s ? tkfSeg(c, s, wn, curN) : h('span',{class:'tk-ph'}));
+      lanes.push(s ? tkfSeg(c, s, wn, curN, editable) : h('span',{class:'tk-ph'}));
     }
     return h('div',{class:'tk-cell' + (editable ? '' : ' ro') + (selItem ? (valid ? ' ok' : ' dim') : ''),
-      onclick: async () => {
+      onclick: delayClick(async () => {
         if(selItem && valid){ if(await tkfPlace(c, { item:selItem, week:wn })){ T.sel = null; render(); } return; }
         if(selItem){ const [a,b] = itemRange(selItem); toast(`"${itemLabel(selItem)}" נכנסת רק לשורה ה${TKF_ROWS.find(r=>r.id===tkfRowOf(selItem.type)).label.split(' ')[0]} ב${rangeLabel(a,b)}`,'err'); return; }
         tkfCellModal(c, row, wn, editable);
-      },
+      }),
       ondragover: e => { if(dragOk()){ e.preventDefault(); e.currentTarget.classList.add('over'); } },
       ondragleave: e => e.currentTarget.classList.remove('over'),
       ondrop: e => { e.preventDefault(); e.currentTarget.classList.remove('over'); const ok = dragOk(), it = CAT[T.drag]; T.drag = null; if(it && ok) tkfPlace(c, { item:it, week:wn }); else if(it) toast('לא ניתן לשבץ את "' + itemLabel(it) + '" בתא הזה','err'); } },
