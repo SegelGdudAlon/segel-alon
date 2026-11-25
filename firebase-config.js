@@ -9,8 +9,7 @@ window.APP_CONFIG = {
     projectId: "segel-alon",
     storageBucket: "segel-alon.firebasestorage.app",
     messagingSenderId: "604320639422",
-    appId: "1:604320639422:web:f98e3f43f2b95b6eb5b1ef",
-    sheetsApiKey: "AIzaSyCXowkgF6e6ubir6ZndegxlgLLQRC_12LQ"
+    appId: "1:604320639422:web:f98e3f43f2b95b6eb5b1ef"
   },
 
   // 2) מיילים של "בעלי האתר" — תמיד מנהלים, גם אם משהו השתבש בהרשאות.
@@ -19,5 +18,5 @@ window.APP_CONFIG = {
 
   // 3) (לא חובה) מפתח API לקריאת קובץ הנגזרות מ-Google Sheets — ראו מדריך שלב 7.
   //    בלי מפתח: מנהל מעלה את קובץ האקסל ידנית מתוך האתר.
-  sheetsApiKey: ""
+  sheetsApiKey: "AIzaSyCXowkgF6e6ubir6ZndegxlgLLQRC_12LQ"
 };
