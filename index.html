@@ -273,6 +273,18 @@ table.tbl{width:100%;border-collapse:collapse;font-size:14px}
 @media (max-width:640px){.modal-wrap{padding:0;align-items:flex-end}.modal{border-radius:16px 16px 0 0;max-height:94vh}.modal-body{overflow:auto}.modal-foot{border-radius:0}}
 
 /* toasts */
+/* מסך מלא לטבלאות */
+.fs-btn{flex:none}
+.fs-host{position:relative}
+.fs-float{position:absolute;top:6px;inset-inline-end:6px;z-index:5;background:#fff;border:1px solid var(--line);box-shadow:var(--shadow)}
+body.fs-open{overflow:hidden}
+.fs-on{position:fixed!important;inset:0!important;z-index:95!important;margin:0!important;border-radius:0!important;max-width:none!important;width:auto!important;height:100vh;height:100dvh;overflow:auto;background:var(--card);display:flex;flex-direction:column}
+.fs-on.tk-layout{display:grid;padding:10px;background:var(--bg,#f3f1ea);align-content:start}
+.fs-on .tbl-wrap,.fs-on .mgrid-wrap{max-height:none!important;flex:1 1 auto;min-height:0;overflow:auto}
+.card.fs-on > .mgrid-wrap,.card.fs-on > .tbl-wrap{flex:1 1 0}
+.fs-on .tk-wrap.compact .tkgrid thead th{top:0}
+.fs-on .tk-side{top:0;max-height:calc(100dvh - 20px)}
+.card.fs-on > .tk-wrap{max-height:none;flex:1 1 0;overflow:auto}
 #toasts{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);z-index:200;display:flex;flex-direction:column;gap:8px;align-items:center;width:min(92vw,460px)}
 .toast{background:#1c2620;color:#fff;padding:10px 16px;border-radius:12px;font-size:14px;box-shadow:0 8px 24px rgba(0,0,0,.2);animation:tin .2s ease}
 .toast.err{background:var(--danger)}
@@ -776,6 +788,8 @@ function h(tag, props, ...kids){
   return el;
 }
 const ICONS = {
+  expand:'<path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/>',
+  shrink:'<path d="M4 14h6v6"/><path d="M20 10h-6V4"/><path d="M14 10l7-7"/><path d="M3 21l7-7"/>',
   menu:'<path d="M3 6h18M3 12h18M3 18h18"/>',
   x:'<path d="M18 6 6 18M6 6l12 12"/>',
   plus:'<path d="M12 5v14M5 12h14"/>',
@@ -969,13 +983,47 @@ let lastRenderRoute = null;
 function render(){
   const app = $('#app'), sameRoute = lastRenderRoute === UI.route, wy = window.scrollY, saved = {};
   if(sameRoute && app){ const cnt = {}; app.querySelectorAll(SCROLL_SEL).forEach(el => { const k = el.className + '#' + (cnt[el.className] = (cnt[el.className] || 0) + 1); if(el.scrollTop || el.scrollLeft) saved[k] = [el.scrollTop, el.scrollLeft]; }); }
+  if(!sameRoute && UI.fsKey){ UI.fsKey = null; fsSetApi(false); }
   lastRenderRoute = UI.route;
   renderInner();
+  if(app) try { enhanceTables(app); } catch(e){ console.warn(e); }
   if(sameRoute && app){
     const cnt = {}; app.querySelectorAll(SCROLL_SEL).forEach(el => { const k = el.className + '#' + (cnt[el.className] = (cnt[el.className] || 0) + 1); const v = saved[k]; if(v){ el.scrollTop = v[0]; el.scrollLeft = v[1]; } });
     if(Math.abs(window.scrollY - wy) > 1) window.scrollTo(0, wy);
   }
 }
+const FS_SEL = '.tbl-wrap,.mgrid-wrap,.tk-wrap';
+function fsHostOf(w){ return w.closest('.tk-layout') || w.closest('.card') || w.parentElement; }
+function fsSetApi(on){
+  try {
+    if(on && !document.fullscreenElement && document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(()=>{});
+    if(!on && document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(()=>{});
+  } catch(_){}
+}
+function fsToggle(key){
+  UI.fsKey = UI.fsKey === key ? null : key;
+  fsSetApi(!!UI.fsKey);
+  render();
+}
+function enhanceTables(app){
+  const hosts = [];
+  app.querySelectorAll(FS_SEL).forEach(w => { if(w.closest('.modal')) return; const host = fsHostOf(w); if(host && !hosts.includes(host)) hosts.push(host); });
+  const base = UI.route + '|' + ((UI.ment && UI.route==='mentoring') ? UI.ment.tab : '') + '|';
+  let found = false;
+  hosts.forEach((host, i) => {
+    const key = base + i, on = UI.fsKey === key;
+    if(on){ host.classList.add('fs-on'); found = true; }
+    const btn = h('button',{class:'icon-btn fs-btn', type:'button', title: on ? 'יציאה ממסך מלא (Esc)' : 'מסך מלא', 'aria-label': on ? 'יציאה ממסך מלא' : 'מסך מלא', onclick:()=>fsToggle(key)}, icon(on ? 'shrink' : 'expand', 17));
+    const card = host.classList.contains('card') ? host : host.querySelector('.card');
+    const head = card && (card.querySelector(':scope > .card-head') || card.querySelector(':scope > .toolbar'));
+    if(head) head.append(btn);
+    else { (card || host).classList.add('fs-host'); btn.classList.add('fs-float'); (card || host).append(btn); }
+  });
+  if(UI.fsKey && !found) UI.fsKey = null;
+  document.body.classList.toggle('fs-open', !!UI.fsKey);
+}
+document.addEventListener('keydown', e => { if(e.key==='Escape' && UI.fsKey && !document.querySelector('#modal-root .modal-wrap')){ UI.fsKey = null; fsSetApi(false); render(); } });
+document.addEventListener('fullscreenchange', () => { if(!document.fullscreenElement && UI.fsKey){ UI.fsKey = null; render(); } });
 function renderInner(){
   const ae = document.activeElement;
   const fid = ae && ae.dataset && ae.dataset.fid;
