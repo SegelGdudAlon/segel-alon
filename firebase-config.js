@@ -19,4 +19,6 @@ window.APP_CONFIG = {
   // 3) (לא חובה) מפתח API לקריאת קובץ הנגזרות מ-Google Sheets — ראו מדריך שלב 7.
   //    בלי מפתח: מנהל מעלה את קובץ האקסל ידנית מתוך האתר.
   sheetsApiKey: "AIzaSyCzd7lu6SUylluG_cBemb43nQBhUPhEIRQ"
+
+  vapidKey: "BOpPnqhd-DZtuR0FlcSwLEkcW_eRlpedf7AFGWu3okZ1qjU8Av1ObPhJFfXmUKnl9HuIg719i4pb56XG3jNaIwo"
 };
