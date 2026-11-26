@@ -1,6 +1,7 @@
 // שליחת התראות פוש על תג״ב של משימות (טבלת בו״ם / המשימות שלי).
 // רץ פעם ביום מ-GitHub Actions (.github/workflows/notify.yml). לא צריך להריץ ידנית.
 import admin from 'firebase-admin';
+import { makeDeriv, weekdayIL } from './deriv.mjs';
 
 const SA = process.env.FIREBASE_SERVICE_ACCOUNT;
 if(!SA){ console.error('חסר הסוד FIREBASE_SERVICE_ACCOUNT ב-GitHub (Settings ← Secrets and variables ← Actions).'); process.exit(1); }
@@ -32,10 +33,10 @@ async function tokensOf(field, value){
   const q = await db.collection('push').where(field, '==', value).get();
   return q.docs.map(d => d.id);
 }
-async function send(tokens, title, body){
+async function send(tokens, title, body, tag){
   if(!tokens.length) return 0;
   if(DRY){ console.log('[DRY]', tokens.length, 'מכשירים:', title, '|', body); return tokens.length; }
-  const webpush = { notification: Object.assign({ dir: 'rtl', lang: 'he' }, SITE ? { icon: SITE + 'icon-192.png', badge: SITE + 'badge-96.png' } : {}) };
+  const webpush = { notification: Object.assign({ dir: 'rtl', lang: 'he' }, tag ? { tag } : {}, SITE ? { icon: SITE + 'icon-192.png', badge: SITE + 'badge-96.png' } : {}) };
   if(SITE.startsWith('https://')) webpush.fcmOptions = { link: SITE + '#general' };
   const res = await fcm.sendEachForMulticast({ tokens, notification: { title, body }, webpush });
   const dead = [];
@@ -51,6 +52,8 @@ async function main(){
     console.log(`בדיקה ל-${TEST_EMAIL}: ${tokens.length} מכשירים`);
     const n = await send(tokens, 'סגל אלון — בדיקה מהשרת', 'אם קיבלת את זה, ההתראות על תג״ב עובדות ✓');
     console.log('נשלח בהצלחה ל-', n);
+    // בנוסף: תצוגה מקדימה של התראת הנגזרות שלו (אם הוא מפק״ץ / מ״פ / מג״ד / סמג״ד)
+    await derivNotifications(TEST_EMAIL);
     return;
   }
 
@@ -93,4 +96,72 @@ async function main(){
   console.log(`${today}: ${perMember.size} אנשי סגל עם משימות לתזכורת, ${sent} התראות נשלחו.`);
 }
 
-main().catch(e => { console.error(e); process.exit(1); });
+// ---------- נגזרות הדרכה ----------
+const short = (t, n = 38) => t.length > n ? t.slice(0, n - 1) + '…' : t;
+async function derivNotifications(onlyEmail){
+  if(!onlyEmail && weekdayIL() === 'Sat'){ console.log('שבת — בלי התראות נגזרות'); return; }
+  const [src, coh, cfg, memQ, drvQ] = await Promise.all([db.doc('deriv/source').get(), db.doc('app/cohorts').get(), db.doc('app/config').get(), db.collection('members').get(), db.collection('drv').get()]);
+  const weeks = src.exists ? (src.data().weeks || []) : [];
+  if(!weeks.length){ console.log('אין נגזרות — מדלג'); return; }
+  const members = {}; memQ.docs.forEach(d => { members[d.id] = d.data(); });
+  const drv = {}; drvQ.docs.forEach(d => { drv[d.id] = d.data(); });
+  const D = makeDeriv({ weeks, members, drv, cohorts: coh.exists ? coh.data() : null, today });
+  if(!D.cur){ console.log('היום לא בתוך אף שבוע בקובץ הנגזרות — מדלג'); return; }
+  const nm = id => (members[id] || {}).name || '';
+  const comps = [...new Set([...(((cfg.exists && cfg.data().companies) || [])), ...Object.values(members).map(m => m.company).filter(Boolean)])];
+
+  // סטטוס לכל פלוגה + השוואה לאתמול
+  const [yy, mm, dd] = today.split('-').map(Number);
+  const yday = new Date(Date.UTC(yy, mm - 1, dd) - 864e5).toISOString().slice(0, 10);
+  const status = {};
+  for(const c of comps){
+    const st = D.companyStatus(c); if(!st || !(st.allT)) continue;
+    const snapId = `drvsnap_${Buffer.from(c).toString('hex')}_`;
+    const prev = await db.doc('notifLog/' + snapId + yday).get();
+    st.delta = prev.exists && prev.data().week === st.week ? st.allD - (prev.data().allD || 0) : null;
+    status[c] = st;
+    if(!DRY && !onlyEmail) await db.doc('notifLog/' + snapId + today).set({ week: st.week, allD: st.allD, dueD: st.dueD, dueT: st.dueT, at: Date.now(), day: today });
+  }
+
+  let sent = 0;
+  for(const [uid, m] of Object.entries(members)){
+    if(onlyEmail && String(m.email || '').toLowerCase() !== onlyEmail) continue;
+    let title = null, body = null, kind = null;
+    if(m.position === 'מפק״ץ' && m.company){
+      const o = D.openFor(uid); const n = o.today.length + o.late.length;
+      if(!n) continue;
+      kind = 'mf';
+      title = `נגזרות הדרכה: ${n} פתוחות אצלך`;
+      const lines = [];
+      if(o.today.length) lines.push('היום: ' + o.today.slice(0, 3).map(x => short(x.title)).join(' · ') + (o.today.length > 3 ? ` +${o.today.length - 3}` : ''));
+      if(o.late.length) lines.push(`באיחור (${o.late.length}): ` + o.late.slice(0, 3).map(x => short(x.title)).join(' · ') + (o.late.length > 3 ? ` +${o.late.length - 3}` : ''));
+      body = lines.join('\n');
+    } else if(m.position === 'מ״פ' && m.company && status[m.company]){
+      const st = status[m.company]; kind = 'mp';
+      title = `נגזרות — פלוגה ${m.company}: ${st.pct}% מה שנדרש עד היום`;
+      const lines = [`${st.weekName}: ${st.dueD}/${st.dueT} בוצעו עד היום` + (st.late ? ` · ${st.late} באיחור` : '') + ` · כל השבוע ${st.allD}/${st.allT}`];
+      if(st.delta) lines.push(`${st.delta > 0 ? '+' : ''}${st.delta} סומנו מאתמול`);
+      if(st.laggards.length) lines.push('הכי הרבה פתוחים: ' + st.laggards.map(x => `${nm(x.id)} (${x.k})`).join(', '));
+      body = lines.join('\n');
+    } else if(['מג״ד','סמג״ד'].includes(m.position) && Object.keys(status).length){
+      kind = 'bn';
+      const cs = Object.entries(status);
+      const tot = cs.reduce((a, [, s]) => (a.d += s.dueD, a.t += s.dueT, a), { d: 0, t: 0 });
+      title = `נגזרות — גדוד: ${tot.t ? Math.round(tot.d * 100 / tot.t) : 100}% מה שנדרש עד היום`;
+      body = cs.map(([c, s]) => `פלוגה ${c}: ${s.pct}%` + (s.late ? ` (${s.late} באיחור)` : '') + (s.delta ? ` ${s.delta > 0 ? '+' : ''}${s.delta}` : '')).join(' · ');
+    } else continue;
+    const logId = `drv${kind}_${uid}_${today}`;
+    if(!onlyEmail && (await db.doc('notifLog/' + logId).get()).exists) continue;
+    const tokens = await tokensOf('member', uid);
+    if(!onlyEmail && !DRY) await db.doc('notifLog/' + logId).set({ at: Date.now(), day: today });
+    if(!tokens.length) continue;
+    sent += await send(tokens, title, body, 'segel-deriv-' + kind);
+  }
+  console.log(`נגזרות: ${sent} התראות נשלחו (שבוע ${D.cur.n}).`);
+}
+
+async function all(){
+  await main();
+  if(!TEST_EMAIL) await derivNotifications(null);
+}
+all().catch(e => { console.error(e); process.exit(1); });

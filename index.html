@@ -222,6 +222,12 @@ table.tbl{width:100%;border-collapse:collapse;font-size:14px}
 .tbl td{padding:10px 14px;border-bottom:1px solid var(--line);vertical-align:middle}
 .tbl tr.click{cursor:pointer}.tbl tr.click:hover td{background:var(--soft)}
 .tbl-wrap{overflow-x:auto}
+.sec-tgl{flex:none;margin-inline-end:-4px}
+.sec-collapsed.card > :not(.card-head){display:none!important}
+.sec-collapsed:not(.card) > :not(:first-child){display:none!important}
+.sec-collapsed:not(.card) > .card:first-child > :not(.card-head){display:none!important}
+.sec-collapsed .card-head{border-bottom:0}
+.sec-collapsed .fs-btn{display:none}
 /* רס״פיות */
 .inv-kpis{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;align-items:stretch}
 .inv-kpis>div{background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:5px 12px;display:flex;align-items:baseline;gap:6px}
@@ -751,7 +757,7 @@ const MENTOR_EVENTS = [
   { id:'exp3',     label:'הורדת התנסות 3' },
   { id:'plan3',    label:'אישור תוכניות 3' },
   { id:'fb3',      label:'משוב 3' },
-  { id:'sim',      label:'מופע סימולציות' },
+  { id:'sim',      label:'סימולציות' },
   { id:'midEval',  label:'חוו״ד אמצע' },
   { id:'midSocio', label:'סוציומטרי אמצע' },
   { id:'cmdView',  label:'תפיסת פיקוד' },
@@ -1276,7 +1282,7 @@ function pushNudge(){
   if(!P || !P.configured() || P.enabledHere() || P.permission()==='denied') return null;
   try { if(localStorage.getItem('segel-push-nudge') === 'off') return null; } catch(_){}
   return h('div',{class:'banner',style:{display:'flex',alignItems:'center',gap:'10px',flexWrap:'wrap',background:'#e8f1ea',border:'1px solid #cfe0d3',borderRadius:'14px',padding:'10px 14px',margin:'0 0 16px'}},
-    icon('bell',20), h('div',{style:{flex:'1 1 220px'}}, h('b',null,'התראות לטלפון על תג״ב'), h('div',{class:'small muted'}, 'יומיים לפני, יום לפני, ביום עצמו, ואם התג״ב עבר והמשימה לא בוצעה.')),
+    icon('bell',20), h('div',{style:{flex:'1 1 220px'}}, h('b',null,'התראות לטלפון על תג״ב ונגזרות'), h('div',{class:'small muted'}, 'משימות לפני התג״ב ובאיחור, ונגזרות הדרכה שעוד לא בוצעו — פעם ביום בבוקר.')),
     h('button',{class:'btn primary sm',onclick:()=>pushModal()}, 'הפעלה'),
     h('button',{class:'icon-btn',title:'לא עכשיו',onclick:()=>{ try { localStorage.setItem('segel-push-nudge','off'); } catch(_){} render(); }}, icon('x',16)));
 }
@@ -1284,7 +1290,7 @@ async function pushModal(){
   const P = window.__push; if(!P) return;
   const body = h('div',{class:'form'}, h('p',{class:'muted'},'בודק…'));
   const close = openModal({ title:'התראות לטלפון', body, footer:[ h('button',{class:'btn ghost',onclick:()=>close()},'סגירה') ] });
-  const intro = h('p',null,'תקבלו התראה על משימות שאתם אחראים עליהן: ', h('b',null,'יומיים לפני התג״ב, יום לפני, בבוקר של יום התג״ב'), ', ואם התג״ב עבר והמשימה עדיין לא סומנה כבוצעה. ההתראות נשלחות פעם ביום, בבוקר.');
+  const intro = h('p',null,'תקבלו התראה על משימות שאתם אחראים עליהן: ', h('b',null,'יומיים לפני התג״ב, יום לפני, בבוקר של יום התג״ב'), ', ואם התג״ב עבר והמשימה עדיין לא סומנה כבוצעה.', h('br'), h('b',null,'נגזרות הדרכה: '), 'מפק״צים מקבלים את הנגזרות שלהם שעוד לא בוצעו (של היום ובאיחור). מ״פים מקבלים את הסטטוס הפלוגתי וההתקדמות מאתמול, ומג״ד/סמג״ד את הסטטוס הגדודי.', h('br'), 'ההתראות נשלחות פעם ביום, בבוקר (נגזרות — לא בשבת).');
   const draw = async () => {
     const parts = [intro];
     const sup = await P.supported();
@@ -1825,6 +1831,22 @@ function addSectionModal(netId, layout){
   }));
   close = openModal({ title:'הוספת רכיב לעמוד', body });
 }
+// מזעור רכיבים בעמוד נע״ת — נשמר לכל משתמש במכשיר שלו
+const SEC_LS = 'segel-collapsed';
+function secCollapsedMap(){ try { return JSON.parse(localStorage.getItem(SEC_LS) || '{}') || {}; } catch(_){ return {}; } }
+const secCollapsed = k => !!secCollapsedMap()[k];
+function secSetCollapsed(k, on){ const m = secCollapsedMap(); if(on) m[k] = 1; else delete m[k]; try { localStorage.setItem(SEC_LS, JSON.stringify(m)); } catch(_){} }
+function secCollapsible(el, key){
+  if(!el || !el.querySelector) return;
+  const head = el.matches('.card') ? el.querySelector(':scope > .card-head') : el.querySelector('.card-head');
+  if(!head) return;
+  const on = secCollapsed(key);
+  el.classList.toggle('sec-collapsed', on);
+  const toggle = () => { secSetCollapsed(key, !secCollapsed(key)); render(); };
+  const btn = h('button',{class:'icon-btn sec-tgl', type:'button', title: on ? 'הצגת הרכיב' : 'מזעור הרכיב', 'aria-expanded': on ? 'false' : 'true', onclick:e => { e.stopPropagation(); toggle(); }}, icon(on ? 'down' : 'up', 17));
+  head.prepend(btn);
+  const h2 = head.querySelector('h2'); if(h2){ h2.style.cursor = 'pointer'; h2.title = on ? 'לחיצה לפתיחה' : 'לחיצה למזעור'; h2.addEventListener('click', toggle); }
+}
 function netView(net){
   const me = S.me.id, lvl = netLevel(me, net.id), lead = isLead(me, net.id), assigned = !!lvl || lead;
   const full = assigned || isAdmin();
@@ -1844,12 +1866,15 @@ function netView(net){
         h('p',null, h('span',{class:'tag '+(assigned?'accent':'')}, role), info.about ? '  ' + info.about : '')),
       h('div',{class:'ph-actions'},
         custom && mode==='team' ? h('button',{class:'btn '+(editing?'accent':'ghost'),onclick:()=>{ UI.editLayout[net.id]=!editing; render(); }}, icon(editing?'check':'layout',16), editing ? 'סיום עריכה' : 'עריכת העמוד') : null,
+        visible.length > 1 && !editing ? (() => { const keys = visible.map(x => net.id + ':' + x.s.id); const allC = keys.every(k => secCollapsed(k));
+          return h('button',{class:'btn ghost', title: allC ? 'פתיחת כל הרכיבים' : 'מזעור כל הרכיבים בעמוד', onclick:()=>{ keys.forEach(k => secSetCollapsed(k, !allC)); render(); }}, icon(allC ? 'down' : 'up',16), allC ? 'פתיחת הכול' : 'מזעור הכול'); })() : null,
         full ? segmented([{id:'team',label:'תצוגת צוות הנע״ת'},{id:'public',label:'תצוגה כללית'}], mode, v=>{ UI.netView[net.id]=v; render(); }) : null)),
     editing ? h('div',{class:'banner warn'}, icon('layout'), h('div',null,'מצב עריכת עמוד: סדרו רכיבים בחיצים, שנו כותרות, הסתירו מאנשים שאינם משויכים, הסירו או הוסיפו רכיבים חדשים. השינויים נשמרים מיד ומשפיעים על כולם.')) : null,
     mode==='public' && full ? h('div',{class:'banner info'}, icon('eye'), h('div',null,'כך רואים את הלשונית אנשי סגל שאינם משויכים לנע״ת (צפייה בלבד).')) : null,
     !full ? h('div',{class:'banner info'}, icon('eye'), h('div',null,'אינך משויך לנע״ת זה — מוצגת תצוגה לצפייה בלבד. לעדכונים פנו למובילי הנע״ת.')) : null,
     visible.map(({s,i}) => {
       const el = SECTIONS[s.type](net.id, Object.assign({}, ctx, { title:s.title }), s);
+      if(!editing) secCollapsible(el, net.id + ':' + s.id);
       return editing ? h('div',null, layoutBar(net.id, layout, i), el) : el;
     }),
     editing ? h('div',{class:'add-sec'}, h('button',{class:'btn primary',onclick:()=>addSectionModal(net.id, layout)}, icon('plus',16),'הוספת רכיב')) : null,
