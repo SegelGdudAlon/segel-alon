@@ -54,6 +54,7 @@ async function main(){
     console.log('נשלח בהצלחה ל-', n);
     // בנוסף: תצוגה מקדימה של התראת הנגזרות שלו (אם הוא מפק״ץ / מ״פ / מג״ד / סמג״ד)
     await derivNotifications(TEST_EMAIL);
+    await profileNotifications(TEST_EMAIL);
     return;
   }
 
@@ -160,8 +161,31 @@ async function derivNotifications(onlyEmail){
   console.log(`נגזרות: ${sent} התראות נשלחו (שבוע ${D.cur.n}).`);
 }
 
+// ---------- פרופיל חסר: תזכורת פעם בשבוע (יום ראשון) ----------
+// אותם שדות חובה כמו PROFILE_REQ ב-index.html
+const PROFILE_REQ = [ ['name','שם מלא'], ['phone','טלפון'], ['personalNumber','מספר אישי'], ['mastab','מסט״ב'], ['position','תפקיד'], ['company','פלוגה'] ];
+const COMPANY_POSITIONS = ['מ״פ','מפק״ץ'];
+const profileMissing = m => PROFILE_REQ.filter(([k]) => (k !== 'company' || COMPANY_POSITIONS.includes(m.position)) && !String(m[k] || '').trim()).map(([, l]) => l);
+async function profileNotifications(onlyEmail){
+  if(!onlyEmail && weekdayIL() !== 'Sun') return;
+  const memQ = await db.collection('members').get();
+  let sent = 0;
+  for(const d of memQ.docs){
+    const m = d.data();
+    if(onlyEmail && String(m.email || '').toLowerCase() !== onlyEmail) continue;
+    const miss = profileMissing(m); if(!miss.length) continue;
+    const logId = `prof_${d.id}_${today}`;
+    if(!onlyEmail && (await db.doc('notifLog/' + logId).get()).exists) continue;
+    const tokens = await tokensOf('member', d.id);
+    if(!onlyEmail && !DRY) await db.doc('notifLog/' + logId).set({ at: Date.now(), day: today });
+    if(!tokens.length) continue;
+    sent += await send(tokens, 'חסרים פרטים בפרופיל שלך', `חסר: ${miss.join(', ')}. לחצו כדי להשלים באתר.`, 'segel-profile');
+  }
+  console.log(`פרופיל: ${sent} תזכורות נשלחו.`);
+}
+
 async function all(){
   await main();
-  if(!TEST_EMAIL) await derivNotifications(null);
+  if(!TEST_EMAIL){ await derivNotifications(null); await profileNotifications(null); }
 }
 all().catch(e => { console.error(e); process.exit(1); });

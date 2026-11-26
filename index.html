@@ -222,6 +222,8 @@ table.tbl{width:100%;border-collapse:collapse;font-size:14px}
 .tbl td{padding:10px 14px;border-bottom:1px solid var(--line);vertical-align:middle}
 .tbl tr.click{cursor:pointer}.tbl tr.click:hover td{background:var(--soft)}
 .tbl-wrap{overflow-x:auto}
+.input.missing{border-color:var(--warn);background:var(--warn-soft)}
+.me-chip .prof-dot{width:9px;height:9px;border-radius:50%;background:#f0b64b;display:inline-block;box-shadow:0 0 0 2px rgba(255,255,255,.6)}
 .sec-tgl{flex:none;margin-inline-end:-4px}
 .sec-collapsed.card > :not(.card-head){display:none!important}
 .sec-collapsed:not(.card) > :not(:first-child){display:none!important}
@@ -1201,7 +1203,7 @@ function shellView(){
       window.__push ? h('button',{class:'menu-btn',style:{display:'inline-flex',position:'relative'},title:'התראות לטלפון',onclick:()=>pushModal()}, icon('bell',20),
         window.__push.enabledHere() ? h('i',{style:{position:'absolute',top:'7px',insetInlineEnd:'7px',width:'8px',height:'8px',borderRadius:'50%',background:'#8fd19e'}}) : null) : null,
       window.appSignOut ? h('button',{class:'menu-btn',style:{display:'inline-flex'},title:'התנתקות',onclick:()=>window.appSignOut()}, icon('logout',20)) : null,
-      h('button',{class:'me-chip',style:{border:0,color:'#fff',cursor:'pointer'},title:'הפרטים שלי',onclick:()=>memberModal(S.me.id)}, h('span',{class:'me-name'}, nameOf(S.me.id), isAdmin() ? ' · מנהל' : ''), avatar(S.me.id))),
+      h('button',{class:'me-chip',style:{border:0,color:'#fff',cursor:'pointer'},title: profileMissing(meM()).length ? 'חסרים פרטים בפרופיל — לחצו להשלמה' : 'הפרטים שלי',onclick:()=>memberModal(S.me.id)}, profileMissing(meM()).length ? h('i',{class:'prof-dot'}) : null, h('span',{class:'me-name'}, nameOf(S.me.id), isAdmin() ? ' · מנהל' : ''), avatar(S.me.id))),
     h('div',{class:'layout'},
       sidebar(),
       UI.drawer ? h('div',{class:'scrim', onclick:()=>{ UI.drawer=false; render(); }}) : null,
@@ -1270,7 +1272,8 @@ function generalView(){
     h('div',{class:'kpi green'}, h('div',{class:'kpi-num'}, Object.keys(S.members).length), h('div',{class:'kpi-label'}, 'אנשי סגל רשומים')));
 
   const ctx = { editable:true, manage:isAdmin() };
-  return h('div',null, hero, pushNudge(), kpis,
+  maybePromptProfile();
+  return h('div',null, hero, profileBanner(), pushNudge(), kpis,
     myTasksCard(),
     postsSection(),
     summariesSection('general', ctx),
@@ -2229,9 +2232,37 @@ function personRow(m, netCtx){
   return h('div',{class:'person', onclick:()=>memberModal(m.id)},
     avatar(m.id, true),
     h('div',{class:'p-main'},
-      h('div',{class:'p-name'}, nameOf(m.id), m.role==='admin' ? h('span',{class:'tag brand'},'מנהל') : null, m.id===S.me.id ? h('span',{class:'tag accent'},'אני') : null),
+      h('div',{class:'p-name'}, nameOf(m.id), m.role==='admin' ? h('span',{class:'tag brand'},'מנהל') : null, m.id===S.me.id ? h('span',{class:'tag accent'},'אני') : null,
+        (() => { const mi = profileMissing(m); return mi.length ? h('span',{class:'tag warn',title:'חסר: ' + mi.map(x => x.l).join(', ')}, 'פרופיל חסר') : null; })()),
       h('div',{class:'xs muted'}, [m.position, m.company].filter(Boolean).join(' · ') || '—'),
       nets.length ? h('div',{class:'chips',style:{marginTop:'5px'}}, nets.map(n => h('span',{class:'net-tag'}, h('i',{style:{background:n.color}}), n.name, ' · ', leadRole(m.id,n.id) || LEVEL_LABEL[netLevel(m.id,n.id)]))) : null));
+}
+// שדות חובה בפרופיל. פלוגה — חובה למ״פ ולמפק״ץ (נדרשת לחניכה, נגזרות והתראות)
+const PROFILE_REQ = [ ['name','שם מלא'], ['phone','טלפון'], ['personalNumber','מספר אישי'], ['mastab','מסט״ב'], ['position','תפקיד'], ['company','פלוגה'] ];
+const COMPANY_POSITIONS = ['מ״פ','מפק״ץ'];
+function profileMissing(m){
+  if(!m) return [];
+  return PROFILE_REQ.filter(([k]) => (k !== 'company' || COMPANY_POSITIONS.includes(m.position)) && !String(m[k] || '').trim()).map(([k, l]) => ({ k, l }));
+}
+function profileBanner(){
+  const miss = profileMissing(meM()); if(!miss.length) return null;
+  return h('div',{class:'banner warn'}, icon('user'), h('div',{style:{flex:1}}, h('b',null,'צריך להשלים את הפרופיל שלך. '), 'חסר: ' + miss.map(x => x.l).join(', ') + '.'),
+    h('button',{class:'btn primary sm',onclick:()=>memberModal(S.me.id)}, 'השלמת פרטים'));
+}
+// פעם אחת בכל כניסה: חלון שמזכיר להשלים פרטים
+let profilePrompted = false;
+function maybePromptProfile(){
+  if(profilePrompted || !meM() || UI.route === 'staff') return;
+  try { if(sessionStorage.getItem('segel-prof-prompt')) { profilePrompted = true; return; } } catch(_){}
+  const miss = profileMissing(meM()); if(!miss.length) return;
+  profilePrompted = true; try { sessionStorage.setItem('segel-prof-prompt', '1'); } catch(_){}
+  setTimeout(async () => {
+    if(document.querySelector('#modal-root .modal-wrap')) return;
+    if(await confirmDialog('השלמת פרטים בפרופיל', h('div',null,
+      h('p',null, 'חסרים פרטים בפרופיל שלך: ', h('b',null, miss.map(x => x.l).join(', ')), '.'),
+      h('p',{class:'small muted'}, 'הפרטים מופיעים בספר הטלפונים, ותפקיד ופלוגה קובעים מה תראו באתר ואילו התראות תקבלו.')), 'להשלמה עכשיו'))
+      memberModal(S.me.id);
+  }, 900);
 }
 function memberModal(uid, req){
   const existing = uid && S.members[uid];
@@ -2257,6 +2288,7 @@ function memberModal(uid, req){
     h('span',null, h('i',{style:{width:'9px',height:'9px',borderRadius:'50%',background:n.color,display:'inline-block'}}), n.name),
     segmented([{id:'',label:'—'}, ...n.levels.map(l=>({id:l,label:LEVEL_LABEL[l]}))], netsState[n.id] || '', v => { if(v) netsState[n.id]=v; else delete netsState[n.id]; }))));
   [name,email,phone,pnum,mastab].forEach(x => x.disabled = !canEditContact);
+  if(existing){ const miss = profileMissing(m).map(x => x.k); [['name',name],['phone',phone],['personalNumber',pnum],['mastab',mastab],['position',pos],['company',comp]].forEach(([k, el]) => { if(miss.includes(k)) el.classList.add('missing'); }); }
   [pos,comp].forEach(x => x.disabled = !canEditOrg);
   role.disabled = !admin || self;
   if(!canEditOrg) netsGrid.style.pointerEvents = 'none';
@@ -4430,7 +4462,7 @@ function phonebookView(){
     pageHead('ספר טלפונים','הפרטים נשאבים אוטומטית מהפרטים האישיים של כל איש סגל.',
       [ h('button',{class:'btn primary',onclick:()=>memberModal(S.me.id)}, icon('user',16),'עדכון הפרטים שלי'),
         S.downloads && list.length ? h('button',{class:'btn ghost',onclick:exportCsv}, icon('dl',16),'ייצוא לאקסל') : null ]),
-    meMissing ? h('div',{class:'banner warn'}, icon('user'), h('div',null,'חסרים פרטים בכרטיס שלך (טלפון / מספר אישי / מסט״ב). ', h('button',{class:'linkish',onclick:()=>memberModal(S.me.id)},'השלמת פרטים'))) : null,
+    profileBanner(),
     h('div',{class:'card'},
       h('div',{class:'toolbar'},
         inp(f.q,'חיפוש שם, טלפון, מספר אישי…',{class:'input grow','data-fid':'pbq',oninput:e=>{ f.q=e.target.value; schedule(); }}),
