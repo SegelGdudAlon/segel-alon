@@ -222,6 +222,28 @@ table.tbl{width:100%;border-collapse:collapse;font-size:14px}
 .tbl td{padding:10px 14px;border-bottom:1px solid var(--line);vertical-align:middle}
 .tbl tr.click{cursor:pointer}.tbl tr.click:hover td{background:var(--soft)}
 .tbl-wrap{overflow-x:auto}
+/* רס״פיות */
+.inv-kpis{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;align-items:stretch}
+.inv-kpis>div{background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:5px 12px;display:flex;align-items:baseline;gap:6px}
+.inv-kpis b{font-size:17px}.inv-kpis span{font-size:12px;color:var(--muted)}
+.inv-kpis .inv-warn{background:var(--warn-soft);border-color:transparent;color:#6e4a06;font-size:12.5px;align-items:center}
+.inv-wrap{max-height:70vh;overflow:auto}
+.inv-tbl thead th{position:sticky;top:0;z-index:2}
+.inv-tbl tfoot td{position:sticky;bottom:0;background:var(--soft);font-weight:800;border-top:2px solid var(--line)}
+.inv-tbl td,.inv-tbl th{padding:6px 10px}
+.inv-tbl .num{text-align:center;white-space:nowrap}
+.inv-tbl .inv-name{font-weight:600;min-width:130px}
+.inv-tbl tr.inv-grp td{background:#eef3ee;font-weight:800;font-size:12.5px;color:var(--brand);padding:5px 10px;position:sticky;top:31px;z-index:1}
+.inv-c{text-align:center;white-space:nowrap}
+.inv-c.ed{cursor:pointer}.inv-c.ed:hover{background:var(--brand-soft)}
+.inv-bad{color:var(--danger);font-size:11px;font-weight:700}
+.inv-badn{color:var(--danger)}
+.inv-num{display:inline-flex;align-items:center;gap:6px}
+.inv-num b{min-width:26px;text-align:center}
+.inv-step{width:24px;height:24px;border-radius:7px;border:1px solid var(--line);background:#fff;cursor:pointer;font-weight:800;line-height:1;color:var(--muted)}
+.inv-step:hover{background:var(--brand-soft);color:var(--brand)}
+.inv-req{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}
+.inv-req:last-child{border-bottom:0}
 
 /* files */
 .file-ic{width:38px;height:38px;border-radius:10px;background:var(--brand-soft);color:var(--brand);display:flex;align-items:center;justify-content:center;flex:none}
@@ -683,7 +705,7 @@ const NETS = [
   { id:'yazamut',     name:'יזמות',          levels:['bn'] },
   { id:'dat',         name:'דת',             levels:['bn'] },
   { id:'logistics',   name:'לוגיסטיקה',      levels:['bn','co'],
-    defaultLayout:[{id:'rooms',type:'rooms',public:true}, {id:'equipment',type:'equipment',public:false}, ...['overview','team','bom','summaries','files'].map(t=>({id:t,type:t,public:!['overview','bom','summaries'].includes(t)}))] },
+    defaultLayout:[{id:'rooms',type:'rooms',public:true}, {id:'equipment',type:'equipment',public:false}, {id:'raspia',type:'raspia',public:false}, ...['overview','team','bom','summaries','files'].map(t=>({id:t,type:t,public:!['overview','bom','summaries'].includes(t)}))] },
   { id:'shetach',     name:'שטח ואימונים',   levels:['bn','co'] },
   { id:'miktzoa',     name:'מקצוע צבאי',     levels:['bn','co'] },
   { id:'nivutim',     name:'ניווטים',        levels:['bn','co'] },
@@ -714,6 +736,7 @@ const SECTION_TYPES = {
   table:     { label:'טבלה מותאמת',       desc:'עמודות שאתם מגדירים' },
   rooms:     { label:'ניהול חדרים',        desc:'מפת חדרי הגדוד: פלוגות, כמויות, בנים/בנות', single:true },
   equipment: { label:'ציוד למיטה',         desc:'רשימת ציוד לכל מיטה וסיכום חוסרים בחדרים', single:true },
+  raspia:    { label:'רס״פיות — מלאי ציוד',  desc:'מלאי ציוד לכל פלוגה, תקין/תקול, והעברות בין פלוגות', single:true },
 };
 // מופעי חניכה רשמיים. exp = אפשר לציין איזו התנסות
 const MENTOR_EVENTS = [
@@ -728,6 +751,7 @@ const MENTOR_EVENTS = [
   { id:'exp3',     label:'הורדת התנסות 3' },
   { id:'plan3',    label:'אישור תוכניות 3' },
   { id:'fb3',      label:'משוב 3' },
+  { id:'sim',      label:'מופע סימולציות' },
   { id:'midEval',  label:'חוו״ד אמצע' },
   { id:'midSocio', label:'סוציומטרי אמצע' },
   { id:'cmdView',  label:'תפיסת פיקוד' },
@@ -1103,6 +1127,9 @@ function subscribeAll(onFirst){
   listen('rooms', arr => { const m={}; arr.forEach(x=>m[x.id]=x); S.rooms=m; });
   listen('archives', arr => { const m={}; arr.forEach(x=>m[x.id]=x); S.archives=m; });
   S.db.doc('tkf/catalog').onSnapshot(s => { S.tkfCat = s.exists ? s.data() : null; schedule(); }, e=>console.warn(e));
+  listen('invStock', arr => S.invStock = arr);
+  listen('invReq', arr => S.invReq = arr);
+  S.db.doc('invMeta/cats').onSnapshot(s => { S.invMeta = s.exists ? s.data() : null; schedule(); }, e=>console.warn(e));
 }
 let booting = false;
 function maybeBootstrap(){
@@ -1738,6 +1765,7 @@ const SECTIONS = {
   table:     (netId, ctx, sec) => tableBlock(netId, ctx, sec),
   rooms:     (netId, ctx) => roomsSection(netId, ctx),
   equipment: (netId, ctx) => equipmentSection(netId, ctx),
+  raspia:    (netId, ctx) => raspiaSection(netId, ctx),
 };
 // מי יכול לערוך את מבנה העמוד: מנהל, מובילי הנע"ת, ומשויכים שהם מ"פ או מפק"ץ גדודי
 function canCustomize(netId){
@@ -1748,13 +1776,20 @@ function canCustomize(netId){
 }
 function netLayout(netId){
   const l = (S.nets[netId] || {}).layout;
-  if(Array.isArray(l) && l.length) return l.filter(s => SECTION_TYPES[s.type]);
+  if(Array.isArray(l) && l.length){
+    const out = l.filter(s => SECTION_TYPES[s.type]);
+    // רכיב הרס״פיות נוסף אוטומטית לעמוד הלוגיסטיקה גם אם המבנה שלו כבר נשמר (פעם אחת)
+    if(netId === 'logistics' && !(S.nets[netId] || {}).raspiaSeen && !out.some(s => s.type === 'raspia')){
+      const at = out.findIndex(s => s.type === 'equipment'); out.splice(at >= 0 ? at + 1 : 0, 0, { id:'raspia', type:'raspia', public:false });
+    }
+    return out;
+  }
   if(NET_BY_ID[netId] && NET_BY_ID[netId].defaultLayout) return NET_BY_ID[netId].defaultLayout;
   return DEFAULT_TEAM_SECTIONS.map(t => ({ id:t, type:t, public:!TEAM_ONLY_DEFAULT.includes(t) }));
 }
 function saveLayout(netId, layout){
   const info = S.nets[netId] || {};
-  return act(S.db.doc('nets/'+netId).set(Object.assign(stripId(info), { layout, updatedAt:Date.now(), updatedBy:S.me.id })));
+  return act(S.db.doc('nets/'+netId).set(Object.assign(stripId(info), { layout, updatedAt:Date.now(), updatedBy:S.me.id }, netId==='logistics' ? { raspiaSeen:true } : {})));
 }
 function layoutBar(netId, layout, i){
   const s = layout[i], T = SECTION_TYPES[s.type];
@@ -2103,7 +2138,7 @@ async function sendInvites(t){
 
 /* ---------- staff ---------- */
 // ייצוא כל הנתונים לקובץ JSON — לגיבוי או להעברת האתר לשרת אחר
-const EXPORT_COLLECTIONS = ['app','archives','blocks','bom','cadets','deriv','drv','files','folders','members','nets','posts','requests','rooms','tasks','tkf'];
+const EXPORT_COLLECTIONS = ['app','archives','blocks','bom','cadets','deriv','drv','files','folders','members','nets','posts','requests','rooms','tasks','tkf','invStock','invReq','invMeta','invLog'];
 async function exportAllData(){
   if(!S.downloads) return toast('הורדת קבצים לא זמינה בתצוגה הזו','err');
   toast('אוסף את כל הנתונים…');
@@ -3985,6 +4020,367 @@ function equipItemModal(items, i){
   const close = openModal({ title:'עריכת פריט', body:h('div',{class:'form'}, field('שם', name), field('כמות לכל מיטה', qty)), footer:[save, h('button',{class:'btn ghost',onclick:()=>close()},'ביטול')] });
   save.addEventListener('click', async () => { if(!name.value.trim()) return toast('נא למלא שם','err');
     if(await saveEquipList(items.map((x,j) => j===i ? Object.assign({}, x, { name:name.value.trim(), qty:Math.max(1, +qty.value||1) }) : x), 'נשמר')) close(); });
+}
+
+/* =====================================================================
+   רס״פיות — מלאי ציוד פלוגתי (שולב מאתר המלאי של הגדוד)
+   נתונים: invStock (שורה לכל פלוגה×ציוד), invReq (בקשות העברה),
+           invMeta/cats (קטגוריות ושיוך פריטים), invLog (יומן פעולות)
+   ===================================================================== */
+const INV_DEFAULT_CATS = ['ציוד מטווח','מיכלי מים','ציוד מהאל','כלי עבודה','שולחנות וכיסאות','ארגזי סמל ותכולתם'];
+const INV_NOCAT = 'לא משויך';
+const INV_REQ_ST = { pending:'ממתין', approved:'אושר', rejected:'נדחה', cancelled:'בוטל' };
+// נרמול שם ציוד: רווחים, גרשיים ומירכאות — כמו באתר המקורי
+const invKey = s => String(s || '').trim().replace(/\s+/g, ' ').replace(/['’`]/g, '׳').replace(/"/g, '״');
+const invSoft = s => invKey(s).replace(/[\s׳״'"`\-.]/g,'').replace(/[וי]/g,'').replace(/ם/g,'מ').replace(/ן/g,'נ').replace(/ץ/g,'צ').replace(/ף/g,'פ').replace(/ך/g,'כ');
+function invLev1(a, b){
+  if(a === b) return true; if(Math.abs(a.length - b.length) > 1) return false;
+  let i = 0, j = 0, d = 0;
+  while(i < a.length && j < b.length){ if(a[i] === b[j]){ i++; j++; continue; } if(++d > 1) return false; if(a.length > b.length) i++; else if(b.length > a.length) j++; else { i++; j++; } }
+  return d + (a.length - i) + (b.length - j) <= 1;
+}
+const invSimilar = (a, b) => { if(invKey(a) === invKey(b)) return false; const x = invSoft(a), y = invSoft(b); return x === y || (Math.min(x.length, y.length) >= 4 && invLev1(x, y)); };
+const invCoKey = c => String(c || '').replace(/[׳'״"\s]/g, '');
+const invHash = s => { let h1 = 5381, h2 = 52711; for(let i = 0; i < s.length; i++){ const c = s.charCodeAt(i); h1 = (h1 * 33) ^ c; h2 = (h2 * 33) ^ c; } return (h1 >>> 0).toString(36) + (h2 >>> 0).toString(36); };
+const invDocId = (co, item) => 's_' + invHash(invCoKey(co) + '|' + invKey(item));
+const invCats = () => { const l = (S.invMeta && S.invMeta.list) || INV_DEFAULT_CATS; return l.slice(); };
+const invCatOf = item => ((S.invMeta && S.invMeta.map) || {})[invKey(item)] || INV_NOCAT;
+const invStock = () => (S.invStock || []).filter(r => r.item);
+const invComps = () => { const l = companies(); const extra = [...new Set(invStock().map(r => r.company).filter(c => c && !l.includes(c)))].sort((a, b) => a.localeCompare(b, 'he')); return l.concat(extra); };
+const invRow = (co, item) => invStock().find(r => r.company === co && invKey(r.item) === invKey(item));
+const invAllNames = () => [...new Set(invStock().map(r => r.item))].sort((a, b) => a.localeCompare(b, 'he'));
+function invCanEdit(co){
+  const me = S.me.id, m = meM() || {}, lvl = netLevel(me, 'logistics');
+  if(isAdmin() || isLead(me, 'logistics') || lvl === 'bn') return true;
+  return lvl === 'co' && !!co && invCoKey(m.company) === invCoKey(co);
+}
+const invEditableComps = () => invComps().filter(invCanEdit);
+function invLog(action, company, item, details){
+  const id = 'l' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  return S.db.doc('invLog/' + id).set({ at: Date.now(), action, company: company || '', item: item || '', details: details || '', by: S.me.id }).catch(e => console.warn('invLog', e));
+}
+async function invSaveRow(co, item, ok, bad){
+  const existing = invStock().find(r => invKey(r.item) === invKey(item));
+  const name = existing ? existing.item : invKey(item);       // שם קיים גובר, כדי שלא ייווצרו כפילויות
+  await S.db.doc('invStock/' + invDocId(co, name)).set({ company: co, item: name, ok: Math.max(0, Math.round(+ok || 0)), bad: Math.max(0, Math.round(+bad || 0)), updatedAt: Date.now(), by: S.me.id });
+  return name;
+}
+async function invSetCat(item, cat){
+  const map = Object.assign({}, (S.invMeta && S.invMeta.map) || {});
+  if(map[invKey(item)] === cat) return;
+  map[invKey(item)] = cat;
+  await S.db.doc('invMeta/cats').set(Object.assign({}, S.invMeta || {}, { list: invCats(), map }));
+}
+
+function raspiaSection(netId, ctx){
+  const T = UI.inv || (UI.inv = { co: null, q: '', cat: '', showHist: false });
+  const comps = invComps();
+  if(T.co === null){ const m = meM() || {}; T.co = (netLevel(S.me.id, 'logistics') === 'co' && comps.includes(m.company)) ? m.company : '__bn'; }
+  if(T.co !== '__bn' && !comps.includes(T.co)) T.co = '__bn';
+  const bn = T.co === '__bn';
+  const rows = invStock();
+  const match = r => (!T.q || r.item.includes(T.q.trim())) && (!T.cat || invCatOf(r.item) === T.cat);
+  const tot = list => list.reduce((a, r) => { a.ok += +r.ok || 0; a.bad += +r.bad || 0; return a; }, { ok: 0, bad: 0 });
+
+  // בחירת פלוגה
+  const coCount = c => rows.filter(r => r.company === c).length;
+  const coSeg = h('div',{class:'seg'}, [{ id:'__bn', label:'כל הגדוד' }, ...comps.map(c => ({ id:c, label:`פלוגה ${c}` + (coCount(c) ? '' : ' ·') }))].map(o =>
+    h('button',{type:'button', class: o.id === T.co ? 'on' : '', onclick:()=>{ T.co = o.id; render(); }}, o.label)));
+
+  const cats = [...invCats(), INV_NOCAT];
+  const toolbar = h('div',{class:'toolbar'},
+    inp(T.q, 'חיפוש ציוד…', { class:'input grow', 'data-fid':'invq', oninput:e => { T.q = e.target.value; schedule(); } }),
+    sel([{ value:'', label:'כל הקטגוריות' }, ...cats.map(c => ({ value:c, label:c }))], T.cat, { onchange:e => { T.cat = e.target.value; render(); } }),
+    !bn && invCanEdit(T.co) ? h('button',{class:'btn primary sm', onclick:()=>invItemModal(T.co, null)}, icon('plus',14), 'הוספת ציוד') : null,
+    invEditableComps().length ? h('button',{class:'btn sm', onclick:()=>invTransferModal(bn ? null : T.co)}, icon('move',14), 'בקשת העברה') : null);
+
+  // KPIs
+  const scope = bn ? rows : rows.filter(r => r.company === T.co);
+  const t = tot(scope);
+  const empties = bn ? comps.filter(c => !coCount(c)) : [];
+  const kpis = h('div',{class:'inv-kpis'},
+    h('div',null, h('b',null, new Set(scope.map(r => invKey(r.item))).size), h('span',null,'סוגי ציוד')),
+    h('div',null, h('b',{style:{color:'var(--ok)'}}, t.ok), h('span',null,'תקין')),
+    h('div',null, h('b',{style:{color: t.bad ? 'var(--danger)' : ''}}, t.bad), h('span',null,'תקול')),
+    h('div',null, h('b',null, t.ok + t.bad), h('span',null,'סה״כ')),
+    empties.length ? h('div',{class:'inv-warn'}, icon('flag',14), `עוד לא הזינו ציוד: ${empties.map(c => 'פלוגה ' + c).join(', ')}`) : null);
+
+  // טבלה
+  const shown = scope.filter(match);
+  let table;
+  if(!rows.length) table = h('div',{class:'card-body'}, empty('עדיין אין נתוני מלאי. מנהל האתר יכול לייבא את הנתונים מהאתר הקודם (כפתור ״ייבוא״ למעלה), או שכל פלוגה מוסיפה את הציוד שלה.','list'));
+  else if(!shown.length) table = h('div',{class:'card-body'}, empty('לא נמצא ציוד שמתאים לחיפוש','list'));
+  else if(bn){
+    const byItem = new Map();
+    shown.forEach(r => { const k = invKey(r.item); if(!byItem.has(k)) byItem.set(k, { item: r.item, per: {} }); byItem.get(k).per[r.company] = r; });
+    const groups = cats.map(c => ({ c, items: [...byItem.values()].filter(x => invCatOf(x.item) === c).sort((a, b) => a.item.localeCompare(b.item, 'he')) })).filter(g => g.items.length);
+    const cell = (co, x) => { const r = x.per[co]; const ed = invCanEdit(co);
+      return h('td',{class:'inv-c' + (ed ? ' ed' : ''), title: ed ? `פלוגה ${co} · לחיצה לעריכה` : '', onclick: ed ? () => invItemModal(co, r ? r.item : x.item, !r) : null},
+        r ? [h('b',null, r.ok), r.bad ? h('span',{class:'inv-bad'}, ` +${r.bad}`) : null] : h('span',{class:'muted'}, '—')); };
+    table = h('div',{class:'tbl-wrap inv-wrap'}, h('table',{class:'tbl inv-tbl'},
+      h('thead',null, h('tr',null, h('th',null,'ציוד'), comps.map(c => h('th',{class:'num'}, 'פלוגה ' + c)), h('th',{class:'num'},'סה״כ תקין'), h('th',{class:'num'},'סה״כ תקול'))),
+      h('tbody',null, groups.map(g => [
+        h('tr',{class:'inv-grp'}, h('td',{colspan: comps.length + 3}, g.c, h('span',{class:'xs muted'}, ` · ${g.items.length}`))),
+        ...g.items.map(x => { const tt = tot(Object.values(x.per));
+          return h('tr',null, h('td',{class:'inv-name'}, x.item), comps.map(c => cell(c, x)),
+            h('td',{class:'num'}, h('b',null, tt.ok)), h('td',{class:'num'}, tt.bad ? h('span',{class:'tag err'}, tt.bad) : h('span',{class:'muted'},'0'))); }) ])),
+      h('tfoot',null, h('tr',null, h('td',null,'סה״כ'), comps.map(c => { const x = tot(shown.filter(r => r.company === c)); return h('td',{class:'num'}, x.ok, x.bad ? h('span',{class:'inv-bad'}, ` +${x.bad}`) : null); }),
+        h('td',{class:'num'}, tot(shown).ok), h('td',{class:'num'}, tot(shown).bad)))));
+  } else {
+    const ed = invCanEdit(T.co);
+    const groups = cats.map(c => ({ c, items: shown.filter(r => invCatOf(r.item) === c).sort((a, b) => a.item.localeCompare(b.item, 'he')) })).filter(g => g.items.length);
+    const step = (r, field, d) => h('button',{class:'inv-step', type:'button', title: d > 0 ? 'הוספה' : 'הורדה', onclick: async e => { e.stopPropagation();
+      const v = Math.max(0, (+r[field] || 0) + d); const okv = field === 'ok' ? v : r.ok, badv = field === 'bad' ? v : r.bad;
+      if(await act(invSaveRow(r.company, r.item, okv, badv))) invLog('עדכון מלאי', r.company, r.item, `תקין ${okv}, תקול ${badv}`); }}, d > 0 ? '+' : '−');
+    const numCell = (r, field) => h('td',{class:'num'}, h('div',{class:'inv-num'}, ed ? step(r, field, -1) : null, h('b',{class: field === 'bad' && r.bad ? 'inv-badn' : ''}, r[field] || 0), ed ? step(r, field, 1) : null));
+    table = h('div',{class:'tbl-wrap inv-wrap'}, h('table',{class:'tbl inv-tbl'},
+      h('thead',null, h('tr',null, h('th',null,'ציוד'), h('th',{class:'num'},'תקין'), h('th',{class:'num'},'תקול'), h('th',{class:'num'},'סה״כ'), h('th',null,'עודכן'))),
+      h('tbody',null, groups.map(g => [
+        h('tr',{class:'inv-grp'}, h('td',{colspan:5}, g.c, h('span',{class:'xs muted'}, ` · ${g.items.length}`))),
+        ...g.items.map(r => h('tr',{class: ed ? 'click' : '', onclick: ed ? e => { if(e.target.closest('.inv-step')) return; invItemModal(r.company, r.item); } : null},
+          h('td',{class:'inv-name'}, r.item), numCell(r, 'ok'), numCell(r, 'bad'), h('td',{class:'num'}, (+r.ok || 0) + (+r.bad || 0)),
+          h('td',{class:'xs muted'}, r.updatedAt ? fmtWhen(r.updatedAt) : ''))) ]))));
+  }
+
+  // בקשות העברה
+  const reqs = (S.invReq || []).slice().sort((a, b) => (b.at || 0) - (a.at || 0));
+  const approverOf = r => r.createdBy === r.from ? r.to : r.from;
+  const mine = r => invCanEdit(r.from) || invCanEdit(r.to);
+  const rel = bn ? reqs : reqs.filter(r => r.from === T.co || r.to === T.co);
+  const pending = rel.filter(r => r.status === 'pending');
+  const hist = rel.filter(r => r.status !== 'pending');
+  const reqRow = r => {
+    const canDecide = r.status === 'pending' && invCanEdit(approverOf(r));
+    const canCancel = r.status === 'pending' && invCanEdit(r.createdBy) && !canDecide;
+    return h('div',{class:'inv-req'},
+      h('div',{style:{flex:'1 1 240px'}},
+        h('b',null, `${r.qty} × ${r.item}`), h('span',{class:'small muted'}, `  · מפלוגה ${r.from} לפלוגה ${r.to}`),
+        h('div',{class:'xs muted'}, `${fmtWhen(r.at)} · נוצר ע״י פלוגה ${r.createdBy}` + (r.status === 'pending' ? ` · ממתין לאישור פלוגה ${approverOf(r)}` : '') + (r.note ? ` · ${r.note}` : '') + (r.reason ? ` · סיבה: ${r.reason}` : ''))),
+      r.status === 'pending' ? null : h('span',{class:'tag ' + (r.status === 'approved' ? 'ok' : r.status === 'rejected' ? 'err' : '')}, INV_REQ_ST[r.status] || r.status),
+      canDecide ? [h('button',{class:'btn primary sm', onclick:()=>invDecide(r, true)}, icon('check',14), 'אישור'), h('button',{class:'btn ghost sm', onclick:()=>invDecide(r, false)}, 'דחייה')] : null,
+      canCancel ? h('button',{class:'btn ghost sm', onclick:()=>invCancel(r)}, 'ביטול') : null);
+  };
+  const reqBlock = h('div',null,
+    h('div',{class:'sub-head'}, icon('move',15), 'בקשות העברה', pending.length ? h('span',{class:'tag warn'}, `${pending.length} ממתינות`) : h('span',{class:'xs muted'}, '· אין בקשות ממתינות'),
+      h('span',{style:{flex:1}}), hist.length ? h('button',{class:'linkish small', onclick:()=>{ T.showHist = !T.showHist; render(); }}, T.showHist ? 'הסתרת ההיסטוריה' : `היסטוריה (${hist.length})`) : null),
+    pending.length || (T.showHist && hist.length) ? h('div',{class:'card-body'}, pending.map(reqRow), T.showHist ? hist.slice(0, 60).map(reqRow) : null) : null);
+
+  const actions = [
+    h('button',{class:'btn ghost sm', onclick:invLogModal}, icon('clock',14), 'יומן'),
+    rows.length && S.downloads ? h('button',{class:'btn ghost sm', onclick:invExportCsv}, icon('dl',14), 'דוח מלאי') : null,
+    (isAdmin() || isLead(S.me.id, 'logistics') || netLevel(S.me.id, 'logistics') === 'bn') ? h('button',{class:'btn ghost sm', onclick:invCatsModal}, icon('gear',14), 'קטגוריות') : null,
+    isAdmin() ? h('button',{class:'btn ghost sm', onclick:invImport}, icon('upload',14), 'ייבוא') : null ];
+  const myPend = reqs.filter(r => r.status === 'pending' && invCanEdit(approverOf(r)));
+  return card(ctx.title || 'רס״פיות — מלאי ציוד פלוגתי', 'list', actions,
+    myPend.length ? h('div',{class:'banner warn',style:{margin:'12px 16px 0'}}, icon('move'), h('div',null, h('b',null, `${myPend.length} בקשות העברה ממתינות לאישור שלך`), ' — מופיעות למטה, תחת ״בקשות העברה״.')) : null,
+    h('div',{class:'card-body',style:{paddingBottom:'4px'}}, coSeg, kpis),
+    toolbar, table, reqBlock);
+}
+const fmtWhen = ms => { try { const d = new Date(ms); return `${d.getDate()}.${d.getMonth() + 1} ${pad(d.getHours())}:${pad(d.getMinutes())}`; } catch { return ''; } };
+
+function invItemModal(co, item, isNew){
+  const r = item ? invRow(co, item) : null;
+  const creating = !r;
+  const name = inp(r ? r.item : (item || ''), 'שם הציוד, לדוגמה: אלונקות', { list:'inv-names', maxlength:40 });
+  const dl = h('datalist',{id:'inv-names'}, invAllNames().map(n => h('option',{value:n})));
+  const cats = invCats();
+  const curCat = item ? invCatOf(item) : '';
+  const cat = sel([{ value:'', label:'בחירת קטגוריה…' }, ...cats.map(c => ({ value:c, label:c }))], cats.includes(curCat) ? curCat : '');
+  const ok = inp(String(r ? r.ok : 0), '', { type:'number', min:0, max:100000, inputmode:'numeric' });
+  const bad = inp(String(r ? r.bad : 0), '', { type:'number', min:0, max:100000, inputmode:'numeric' });
+  const hint = h('div',{class:'hint'});
+  const checkName = () => {
+    const v = name.value.trim(); hint.replaceChildren();
+    if(!v) return;
+    const same = invAllNames().find(n => invKey(n) === invKey(v));
+    if(same){ if(!cat.value){ const c = invCatOf(same); if(cats.includes(c)) cat.value = c; } if(creating && invRow(co, same)) hint.append('לפלוגה כבר יש את הפריט הזה — השמירה תעדכן את הכמויות.'); return; }
+    const sim = invAllNames().filter(n => invSimilar(n, v)).slice(0, 3);
+    if(sim.length) hint.append('כבר קיים ציוד בשם דומה: ', ...sim.map(n => h('button',{type:'button',class:'tagchip',style:{margin:'0 4px'},onclick:()=>{ name.value = n; checkName(); }}, n)));
+  };
+  name.addEventListener('input', checkName); checkName();
+  const save = h('button',{class:'btn primary'}, 'שמירה');
+  const del = !creating ? h('button',{class:'btn ghost danger', style:{marginInlineStart:'auto'}}, icon('trash',15), 'מחיקה') : null;
+  const close = openModal({ title: (creating ? 'הוספת ציוד' : 'עריכת ציוד') + ` · פלוגה ${co}`,
+    body: h('div',{class:'form'}, field('שם הציוד', h('div',null, name, dl), null), hint,
+      field('קטגוריה', cat, 'הקטגוריה משותפת לכל הגדוד — שינוי שלה משנה את הפריט בכל הפלוגות.'),
+      h('div',{style:{display:'flex',gap:'12px'}}, h('div',{style:{flex:1}}, field('תקין', ok)), h('div',{style:{flex:1}}, field('תקול', bad)))),
+    footer: [save, h('button',{class:'btn ghost', onclick:()=>close()}, 'ביטול'), del] });
+  setTimeout(() => (creating ? name : ok).focus(), 50);
+  save.addEventListener('click', async () => {
+    const nm = name.value.trim();
+    if(!nm) return toast('נא למלא שם ציוד','err');
+    if(nm.length > 40) return toast('שם עד 40 תווים','err');
+    if(!cat.value) return toast('נא לבחור קטגוריה','err');
+    const o = +ok.value, b = +bad.value;
+    if(!(o >= 0 && b >= 0 && o <= 100000 && b <= 100000)) return toast('כמויות לא תקינות','err');
+    save.disabled = true;
+    try {
+      if(r && invKey(r.item) !== invKey(nm)){ await S.db.doc('invStock/' + invDocId(co, r.item)).delete(); }
+      const finalName = await invSaveRow(co, nm, o, b);
+      await invSetCat(finalName, cat.value);
+      invLog('עדכון מלאי', co, finalName, `תקין ${Math.round(o)}, תקול ${Math.round(b)}, ${cat.value}`);
+      toast('נשמר'); close();
+    } catch(e){ toast(errMsg(e), 'err'); save.disabled = false; }
+  });
+  if(del) del.addEventListener('click', async () => {
+    if(!(await confirmDialog('מחיקת ציוד', `למחוק את "${r.item}" מהמלאי של פלוגה ${co}?`, 'מחיקה', true))) return;
+    if(await act(S.db.doc('invStock/' + invDocId(co, r.item)).delete(), 'נמחק')){ invLog('מחיקת ציוד', co, r.item, ''); close(); }
+  });
+}
+
+function invTransferModal(defCo){
+  const mineList = invEditableComps();
+  const comps = invComps();
+  const st = { me: defCo && mineList.includes(defCo) ? defCo : mineList[0], dir: 'send', other: '', item: '', qty: 1, note: '' };
+  const body = h('div',{class:'form'});
+  const save = h('button',{class:'btn primary'}, 'שליחת בקשה');
+  const draw = () => {
+    const others = comps.filter(c => c !== st.me);
+    if(!others.includes(st.other)) st.other = others[0] || '';
+    const giver = st.dir === 'send' ? st.me : st.other;
+    const avail = invStock().filter(r => r.company === giver && (+r.ok || 0) > 0).sort((a, b) => a.item.localeCompare(b.item, 'he'));
+    if(!avail.some(r => r.item === st.item)) st.item = avail[0] ? avail[0].item : '';
+    const max = (avail.find(r => r.item === st.item) || {}).ok || 0;
+    body.replaceChildren(
+      mineList.length > 1 ? field('הפלוגה שלי', sel(mineList.map(c => ({ value:c, label:'פלוגה ' + c })), st.me, { onchange:e => { st.me = e.target.value; draw(); } })) : h('div',{class:'small muted'}, `בשם פלוגה ${st.me}`),
+      field('מה עושים', segmented([{ id:'send', label:'אני שולח ציוד' }, { id:'ask', label:'אני מבקש ציוד' }], st.dir, v => { st.dir = v; draw(); })),
+      field(st.dir === 'send' ? 'לאיזו פלוגה' : 'מאיזו פלוגה', sel(others.map(c => ({ value:c, label:'פלוגה ' + c })), st.other, { onchange:e => { st.other = e.target.value; draw(); } })),
+      avail.length ? field('ציוד', sel(avail.map(r => ({ value:r.item, label:`${r.item} (זמין: ${r.ok})` })), st.item, { onchange:e => { st.item = e.target.value; draw(); } }), `מוצג רק ציוד תקין שיש לפלוגה ${giver}.`)
+        : h('div',{class:'notice'}, `לפלוגה ${giver} אין ציוד תקין במלאי.`),
+      avail.length ? field('כמות', inp(String(st.qty), '', { type:'number', min:1, max, oninput:e => { st.qty = +e.target.value; } }), `עד ${max}`) : null,
+      field('הערה (לא חובה)', inp(st.note, '', { maxlength:200, oninput:e => { st.note = e.target.value; } })),
+      h('div',{class:'xs muted'}, 'הבקשה תעבור לאישור הפלוגה השנייה. הציוד יעבור רק אחרי האישור. ציוד תקול לא עובר בהעברה.'));
+    save.disabled = !avail.length;
+  };
+  draw();
+  const close = openModal({ title:'בקשת העברת ציוד', body, footer:[save, h('button',{class:'btn ghost', onclick:()=>close()}, 'ביטול')] });
+  save.addEventListener('click', async () => {
+    const from = st.dir === 'send' ? st.me : st.other, to = st.dir === 'send' ? st.other : st.me;
+    const r = invRow(from, st.item); const q = Math.round(+st.qty || 0);
+    if(!st.item || !r) return toast('נא לבחור ציוד','err');
+    if(q < 1) return toast('כמות לא תקינה','err');
+    if(q > (+r.ok || 0)) return toast(`לפלוגה ${from} יש רק ${r.ok} תקין`,'err');
+    const id = 'R' + Date.now() + Math.floor(Math.random() * 1000);
+    save.disabled = true;
+    if(await act(S.db.doc('invReq/' + id).set({ at: Date.now(), from, to, item: r.item, qty: q, createdBy: st.me, note: st.note.trim().slice(0, 200), status: 'pending', by: S.me.id }), 'הבקשה נשלחה')){
+      invLog('בקשת העברה', st.me, r.item, `${q} מפלוגה ${from} לפלוגה ${to}`); close();
+    } else save.disabled = false;
+  });
+}
+async function invDecide(r, approve){
+  if(approve){
+    const g = invRow(r.from, r.item);
+    if(!g || (+g.ok || 0) < r.qty) return toast(`לפלוגה ${r.from} אין מספיק ${r.item} תקין (יש ${g ? g.ok : 0})`, 'err');
+    if(!(await confirmDialog('אישור העברה', `להעביר ${r.qty} × ${r.item} מפלוגה ${r.from} לפלוגה ${r.to}?`, 'אישור'))) return;
+    try {
+      const t = invRow(r.to, r.item);
+      await invSaveRow(r.from, g.item, (+g.ok || 0) - r.qty, g.bad);
+      await invSaveRow(r.to, g.item, (t ? +t.ok || 0 : 0) + r.qty, t ? t.bad : 0);
+      await S.db.doc('invReq/' + r.id).set(Object.assign(stripId(r), { status: 'approved', decidedAt: Date.now(), decidedBy: S.me.id }));
+      invLog('אישור העברה', r.to, r.item, `${r.qty} מפלוגה ${r.from} לפלוגה ${r.to}`);
+      toast('ההעברה בוצעה ✓');
+    } catch(e){ toast(errMsg(e), 'err'); }
+  } else {
+    const reason = inp('', 'סיבה (לא חובה)', { maxlength:200 });
+    const ok = h('button',{class:'btn danger'}, 'דחייה');
+    const close = openModal({ title:'דחיית בקשה', body:h('div',{class:'form'}, h('div',null, `${r.qty} × ${r.item} · מפלוגה ${r.from} לפלוגה ${r.to}`), field('סיבה', reason)), footer:[ok, h('button',{class:'btn ghost', onclick:()=>close()}, 'ביטול')] });
+    ok.addEventListener('click', async () => {
+      if(await act(S.db.doc('invReq/' + r.id).set(Object.assign(stripId(r), { status: 'rejected', decidedAt: Date.now(), decidedBy: S.me.id, reason: reason.value.trim().slice(0, 200) })), 'הבקשה נדחתה')){
+        invLog('דחיית העברה', r.from === r.createdBy ? r.to : r.from, r.item, `${r.qty} מפלוגה ${r.from} לפלוגה ${r.to}`); close(); }
+    });
+  }
+}
+async function invCancel(r){
+  if(!(await confirmDialog('ביטול בקשה', `לבטל את הבקשה (${r.qty} × ${r.item})?`, 'ביטול הבקשה', true))) return;
+  if(await act(S.db.doc('invReq/' + r.id).set(Object.assign(stripId(r), { status: 'cancelled', decidedAt: Date.now(), decidedBy: S.me.id })), 'הבקשה בוטלה'))
+    invLog('ביטול בקשה', r.createdBy, r.item, `${r.qty} מפלוגה ${r.from} לפלוגה ${r.to}`);
+}
+async function invLogModal(){
+  const body = h('div',null, h('p',{class:'muted'}, 'טוען…'));
+  const close = openModal({ title:'יומן פעולות — רס״פיות', body, wide:true, footer:[h('button',{class:'btn ghost', onclick:()=>close()}, 'סגירה')] });
+  try {
+    const q = await S.db.collection('invLog').get();
+    const all = q.docs.filter(d => d.exists).map(d => d.data()).sort((a, b) => (b.at || 0) - (a.at || 0));
+    const st = { co: '', q: '' };
+    const draw = () => {
+      const list = all.filter(x => (!st.co || x.company === st.co) && (!st.q || (x.item + ' ' + x.details + ' ' + x.action).includes(st.q))).slice(0, 300);
+      body.replaceChildren(
+        h('div',{class:'toolbar',style:{padding:'0 0 10px'}}, inp(st.q, 'חיפוש…', { class:'input grow', oninput:e => { st.q = e.target.value; draw(); } }),
+          sel([{ value:'', label:'כל הפלוגות' }, ...invComps().map(c => ({ value:c, label:'פלוגה ' + c }))], st.co, { onchange:e => { st.co = e.target.value; draw(); } }),
+          h('span',{class:'small muted'}, `${list.length}${list.length === 300 ? '+' : ''} רשומות`)),
+        list.length ? h('div',{class:'tbl-wrap',style:{maxHeight:'60vh'}}, h('table',{class:'tbl'},
+          h('thead',null, h('tr',null, ['זמן','פעולה','פלוגה','ציוד','פרטים','ע״י'].map(x => h('th',null,x)))),
+          h('tbody',null, list.map(x => h('tr',null, h('td',{class:'xs',style:{whiteSpace:'nowrap'}}, fmtWhen(x.at)), h('td',null, x.action), h('td',null, x.company), h('td',null, x.item), h('td',{class:'small'}, x.details), h('td',{class:'xs muted'}, x.by && S.members[x.by] ? nameOf(x.by) : (x.by === 'import' ? 'האתר הקודם' : ''))))))) : empty('אין רשומות','clock'));
+    };
+    draw();
+  } catch(e){ body.replaceChildren(h('div',{class:'notice'}, 'לא ניתן לטעון את היומן: ' + errMsg(e))); }
+}
+async function invExportCsv(){
+  const comps = invComps(), rows = invStock();
+  const by = new Map(); rows.forEach(r => { const k = invKey(r.item); if(!by.has(k)) by.set(k, { item: r.item, per: {} }); by.get(k).per[r.company] = r; });
+  const list = [...by.values()].sort((a, b) => invCatOf(a.item).localeCompare(invCatOf(b.item), 'he') || a.item.localeCompare(b.item, 'he'));
+  const q = v => '"' + String(v ?? '').replace(/"/g, '""') + '"';
+  const head = ['קטגוריה','ציוד', ...comps.flatMap(c => [`${c} תקין`, `${c} תקול`]), 'סה״כ תקין', 'סה״כ תקול', 'סה״כ'];
+  const lines = list.map(x => { let o = 0, b = 0; const cells = comps.flatMap(c => { const r = x.per[c]; o += r ? +r.ok || 0 : 0; b += r ? +r.bad || 0 : 0; return [r ? r.ok : 0, r ? r.bad : 0]; });
+    return [invCatOf(x.item), x.item, ...cells, o, b, o + b]; });
+  const csv = '﻿' + [head, ...lines].map(l => l.map(q).join(',')).join('\r\n');
+  try { await S.downloads.save({ filename: `דוח מלאי רס״פיות ${dstr(new Date())}.csv`, data: csv }); invLog('ייצוא דוח', '', '', `${list.length} פריטים`); }
+  catch(e){ if(e && e.code !== 'declined') toast('לא ניתן להוריד את הקובץ','err'); }
+}
+function invCatsModal(){
+  const list = invCats();
+  const body = h('div',{class:'form'});
+  const draw = () => body.replaceChildren(
+    h('div',{class:'xs muted'}, 'רשימת הקטגוריות משותפת לכל הגדוד. שינוי שם מעביר את כל הפריטים לשם החדש.'),
+    ...list.map((c, i) => h('div',{style:{display:'flex',gap:'6px',alignItems:'center'}},
+      inp(c, '', { 'data-i': i, oninput:e => { list[i] = e.target.value; } }),
+      h('button',{class:'icon-btn danger', type:'button', title:'הסרה', onclick:()=>{ list.splice(i, 1); draw(); }}, icon('trash',15)))),
+    h('button',{class:'btn ghost sm', type:'button', onclick:()=>{ list.push(''); draw(); }}, icon('plus',14), 'קטגוריה חדשה'));
+  draw();
+  const save = h('button',{class:'btn primary'}, 'שמירה');
+  const close = openModal({ title:'קטגוריות ציוד', body, footer:[save, h('button',{class:'btn ghost', onclick:()=>close()}, 'ביטול')] });
+  save.addEventListener('click', async () => {
+    const old = invCats(); const clean = list.map(x => x.trim());
+    const map = Object.assign({}, (S.invMeta && S.invMeta.map) || {});
+    old.forEach((c, i) => { const n = clean[i]; if(n && n !== c && !list.includes(c)) Object.keys(map).forEach(k => { if(map[k] === c) map[k] = n; }); });
+    const fin = [...new Set(clean.filter(Boolean))];
+    if(await act(S.db.doc('invMeta/cats').set(Object.assign({}, S.invMeta || {}, { list: fin, map })), 'הקטגוריות נשמרו')) close();
+  });
+}
+function invImport(){
+  const file = h('input',{type:'file', accept:'.json,application/json', style:{display:'none'}});
+  document.body.append(file);
+  file.addEventListener('change', async () => {
+    const f = file.files[0]; file.remove(); if(!f) return;
+    let d; try { d = JSON.parse(await f.text()); } catch(_){ return toast('הקובץ לא תקין. צריך לבחור את data.json מתוך הייצוא של האתר הקודם.','err'); }
+    if(!d || !Array.isArray(d.stock)) return toast('לא נמצאו נתוני מלאי בקובץ (מצופה data.json מהייצוא).','err');
+    const ours = companies(); const ourKey = Object.fromEntries(ours.map(c => [invCoKey(c), c]));
+    const coMap = c => ourKey[invCoKey(c)] || invCoKey(c);
+    const unknown = [...new Set(d.stock.map(r => coMap(r.company)).filter(c => !ours.includes(c)))];
+    const ok = await confirmDialog('ייבוא מהאתר הקודם', h('div',null,
+      h('p',null, `נמצאו ${d.stock.length} שורות מלאי, ${(d.requests || []).length} בקשות העברה ו-${(d.log || []).length} רשומות יומן.`),
+      h('p',null, 'ייבוא חוזר דורס את הכמויות שבאתר בכמויות מהקובץ. כדאי לייבא פעם אחת, ממש לפני שעוברים לעבוד רק כאן.'),
+      unknown.length ? h('div',{class:'notice'}, `פלוגות שלא מוגדרות באתר: ${unknown.join(', ')}. הן ייובאו ויוצגו, ומומלץ להוסיף אותן בהגדרות.`) : null), 'ייבוא');
+    if(!ok) return;
+    toast('מייבא… זה לוקח כחצי דקה');
+    try {
+      const pool = async (items, fn, n = 12) => { let i = 0; await Promise.all(Array.from({ length: n }, async () => { while(i < items.length){ const x = items[i++]; await fn(x); } })); };
+      const map = Object.assign({}, (S.invMeta && S.invMeta.map) || {});
+      (d.categories_sheet || []).forEach(x => { if(x.item && x.category) map[invKey(x.item)] = x.category; });
+      d.stock.forEach(r => { if(r.item && r.category && r.category !== INV_NOCAT) map[invKey(r.item)] = r.category; });
+      const list = [...new Set([...((d.constants && d.constants.categories) || INV_DEFAULT_CATS), ...invCats()])];
+      await S.db.doc('invMeta/cats').set({ list, map, importedAt: Date.now() });
+      const ts = s => { const t = Date.parse(s); return isNaN(t) ? Date.now() : t; };
+      await pool(d.stock, r => S.db.doc('invStock/' + invDocId(coMap(r.company), r.item)).set({ company: coMap(r.company), item: invKey(r.item), ok: +r.ok || 0, bad: +r.bad || 0, updatedAt: ts(r.updated_at), by: 'import' }));
+      const stMap = { 'ממתין':'pending', 'אושר':'approved', 'נדחה':'rejected', 'בוטל':'cancelled' };
+      await pool(d.requests || [], r => S.db.doc('invReq/' + r.id).set({ at: ts(r.created_at), from: coMap(r.from_company), to: coMap(r.to_company), item: invKey(r.item), qty: +r.qty || 0,
+        createdBy: coMap(r.created_by), note: r.note || '', status: stMap[r.status] || 'cancelled', decidedAt: r.decided_at ? ts(r.decided_at) : null, reason: r.reject_reason || '', by: 'import' }));
+      await pool(d.log || [], x => S.db.doc('invLog/i_' + invHash(x.at + x.action + x.company + x.item + x.details)).set({ at: ts(x.at), action: x.action, company: x.company ? coMap(x.company) : '', item: x.item || '', details: x.details || '', by: 'import' }));
+      invLog('ייבוא מהאתר הקודם', '', '', `${d.stock.length} שורות מלאי`);
+      toast(`הייבוא הסתיים ✓ (${d.stock.length} שורות מלאי)`);
+    } catch(e){ console.error(e); toast('הייבוא נעצר: ' + errMsg(e) + '. אפשר להריץ שוב.', 'err'); }
+  });
+  file.click();
 }
 
 /* ---------- phone book ---------- */
