@@ -1,7 +1,7 @@
 // שכבת חיבור ל-Firebase: מספקת לאתר את אותו ממשק (window.claude.use) שהיה לו בתוך Claude,
 // כך ששאר הקוד לא תלוי בשירות שמאחוריו. התחברות: חשבון Google. נתונים: Firestore.
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut }
+import { getAuth, GoogleAuthProvider, signInWithPopup, getRedirectResult, onAuthStateChanged, signOut }
   from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
 import { initializeFirestore, doc, collection, getDoc, getDocs, setDoc, deleteDoc, onSnapshot }
   from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
@@ -137,13 +137,87 @@ async function doSignIn(){
   const p = new GoogleAuthProvider(); p.setCustomParameters({ prompt:'select_account' });
   try { await signInWithPopup(auth, p); }
   catch(e){
-    if(e && ['auth/popup-blocked','auth/operation-not-supported-in-environment','auth/cancelled-popup-request'].includes(e.code)) return signInWithRedirect(auth, p);
-    if(e && e.code === 'auth/popup-closed-by-user') return;
-    if(e && e.code === 'auth/unauthorized-domain') return RT.signinError('הכתובת של האתר לא אושרה ב-Firebase (Authentication ← Settings ← Authorized domains).');
-    RT.signinError('ההתחברות נכשלה: ' + (e && e.code || e));
+    const c = e && e.code;
+    if(c === 'auth/popup-closed-by-user' || c === 'auth/cancelled-popup-request') return;
+    if(c === 'auth/popup-blocked') return RT.signinError('הדפדפן חסם את חלון ההתחברות. לחצו שוב על הכפתור. אם זה חוזר — אפשרו חלונות קופצים לאתר, או פתחו אותו ב-Safari / Chrome.', true);
+    if(c === 'auth/operation-not-supported-in-environment' || c === 'auth/web-storage-unsupported' || c === 'auth/internal-error')
+      return RT.signinError('הדפדפן הזה לא תומך בכניסה עם Google. העתיקו את הקישור ופתחו אותו ב-Safari או ב-Chrome.', true);
+    if(c === 'auth/unauthorized-domain') return RT.signinError('הכתובת של האתר לא אושרה ב-Firebase (Authentication ← Settings ← Authorized domains).');
+    if(c === 'auth/network-request-failed') return RT.signinError('אין חיבור לאינטרנט. בדקו את החיבור ונסו שוב.');
+    RT.signinError('ההתחברות נכשלה (' + (c || e) + '). נסו לפתוח את הקישור ב-Safari או ב-Chrome.', true);
   }
 }
-getRedirectResult(auth).catch(e => console.warn(e));
+// כניסה ישנה בהפניה (redirect) — רק כדי לנקות מצב שנשאר מגרסה קודמת
+getRedirectResult(auth).catch(() => {});
+
+/* ---------- התראות פוש (Firebase Cloud Messaging) ---------- */
+const MSG_URL = 'https://www.gstatic.com/firebasejs/10.14.1/firebase-messaging.js';
+const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const isStandalone = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+let msgMod = null, messaging = null;
+async function msgReady(){
+  if(messaging) return messaging;
+  msgMod = msgMod || await import(MSG_URL);
+  if(!(await msgMod.isSupported())) return null;
+  messaging = msgMod.getMessaging(app);
+  msgMod.onMessage(messaging, p => {            // הודעה שמגיעה כשהאתר פתוח
+    const n = (p && p.notification) || {};
+    if(window.toast) window.toast((n.title ? n.title + ' — ' : '') + (n.body || ''));
+  });
+  return messaging;
+}
+async function swReg(){
+  return navigator.serviceWorker.register('./firebase-messaging-sw.js', { scope:'./' });
+}
+const PUSH_LS = 'segel-push-token';
+async function saveToken(token){
+  await setDoc(doc(fs, 'push', token), { member: ME.appId, email: ME.email, at: Date.now(),
+    device: (isIOS ? 'iOS' : /Android/.test(navigator.userAgent) ? 'Android' : 'מחשב') + (isStandalone() ? ' · אפליקציה' : '') });
+  try { localStorage.setItem(PUSH_LS, token); } catch(_){}
+}
+const PUSH = {
+  configured: () => !!CFG.vapidKey,
+  isIOS, isStandalone,
+  async supported(){
+    if(!('serviceWorker' in navigator) || !('Notification' in window) || !('PushManager' in window)) return false;
+    try { return !!(await msgReady()); } catch(_){ return false; }
+  },
+  permission: () => ('Notification' in window) ? Notification.permission : 'unsupported',
+  enabledHere(){ try { return !!localStorage.getItem(PUSH_LS) && PUSH.permission() === 'granted'; } catch(_){ return false; } },
+  // חייב להיקרא מלחיצה של המשתמש
+  async enable(){
+    if(!CFG.vapidKey) throw { heb:'ההתראות עדיין לא הוגדרו באתר (חסר vapidKey בקובץ firebase-config.js).' };
+    const perm = await Notification.requestPermission();
+    if(perm !== 'granted') throw { heb: perm === 'denied' ? 'ההתראות חסומות לאתר הזה. צריך לאפשר אותן בהגדרות הדפדפן / הטלפון.' : 'לא אושרו התראות.' };
+    const m = await msgReady(); if(!m) throw { heb:'הדפדפן הזה לא תומך בהתראות.' };
+    const reg = await swReg();
+    const token = await msgMod.getToken(m, { vapidKey: CFG.vapidKey, serviceWorkerRegistration: reg });
+    if(!token) throw { heb:'לא התקבל אישור מהשרת של Google. נסו שוב.' };
+    await saveToken(token);
+    return true;
+  },
+  async disable(){
+    let t = null; try { t = localStorage.getItem(PUSH_LS); localStorage.removeItem(PUSH_LS); } catch(_){}
+    try { const m = await msgReady(); if(m) await msgMod.deleteToken(m); } catch(_){}
+    if(t) try { await deleteDoc(doc(fs, 'push', t)); } catch(_){}
+  },
+  async test(){
+    const reg = await swReg();
+    await reg.showNotification('סגל אלון — בדיקה', { body:'ככה תיראה התראה על תג״ב שמתקרב.', icon:'icon-192.png', badge:'badge-96.png', lang:'he', dir:'rtl' });
+  }
+};
+window.__push = PUSH;
+// רענון שקט של הטוקן (גוגל מחליפה אותו מדי פעם)
+async function refreshPush(){
+  try {
+    if(!CFG.vapidKey || !PUSH.enabledHere()) return;
+    const m = await msgReady(); if(!m) return;
+    const token = await msgMod.getToken(m, { vapidKey: CFG.vapidKey, serviceWorkerRegistration: await swReg() });
+    const old = localStorage.getItem(PUSH_LS);
+    if(token && token !== old){ if(old) deleteDoc(doc(fs, 'push', old)).catch(() => {}); }
+    if(token) await saveToken(token);
+  } catch(e){ console.warn('push refresh', e); }
+}
 
 let started = false;
 onAuthStateChanged(auth, async u => {
@@ -156,4 +230,5 @@ onAuthStateChanged(auth, async u => {
   try { const m = await getDoc(doc(fs, 'emails', ME.email)); if(m.exists() && m.data().appId) ME.appId = m.data().appId; }
   catch(e){ console.warn('emails lookup', e); }
   RT.ready({ db:DB, user:USER, downloads:DOWNLOADS, assets:null, mcp:null });
+  setTimeout(refreshPush, 3000);
 });

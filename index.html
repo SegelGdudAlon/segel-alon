@@ -4,6 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>סגל אלון לא יכרע ברוח</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<meta name="theme-color" content="#1f4a35">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="סגל אלון">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -243,6 +251,8 @@ table.tbl{width:100%;border-collapse:collapse;font-size:14px}
 .banner{display:flex;gap:10px;align-items:flex-start;padding:12px 14px;border-radius:12px;margin-bottom:16px;font-size:14px}
 .banner.warn{background:var(--warn-soft);color:#6e4a06}
 .banner.info{background:var(--info-soft);color:#1f466f}
+.notice{background:var(--warn-soft);color:#3d3a2a;border-radius:10px;padding:10px 12px;font-size:14px;line-height:1.6}
+.notice svg{vertical-align:-2px}
 .warn-box{background:var(--warn-soft);color:#6e4a06;border-radius:10px;padding:10px 12px;font-size:14px;margin-top:6px}
 .warn-box ul{margin:6px 0 0;padding-inline-start:18px}
 
@@ -789,6 +799,8 @@ function h(tag, props, ...kids){
   return el;
 }
 const ICONS = {
+  bell:'<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
+  share:'<path d="M12 3v12"/><path d="M8 7l4-4 4 4"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/>',
   expand:'<path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/>',
   shrink:'<path d="M4 14h6v6"/><path d="M20 10h-6V4"/><path d="M14 10l7-7"/><path d="M3 21l7-7"/>',
   menu:'<path d="M3 6h18M3 12h18M3 18h18"/>',
@@ -1153,6 +1165,8 @@ function shellView(){
       h('div',{class:'spacer'}),
       (() => { const co = curCohort(); startCountdowns(); return h('a',{class:'co-pill',href:'#archive',title:'המחזור הנוכחי'+(co.start&&co.end?` · ${fmtDate(co.start)}–${fmtDate(co.end)}`:'')}, h('span',{class:'xs',style:{opacity:.8}},'מחזור'), h('b',null, co.name), co.end ? countdownEl(co.end, true) : null); })(),
       h('div',{class:'spacer'}),
+      window.__push ? h('button',{class:'menu-btn',style:{display:'inline-flex',position:'relative'},title:'התראות לטלפון',onclick:()=>pushModal()}, icon('bell',20),
+        window.__push.enabledHere() ? h('i',{style:{position:'absolute',top:'7px',insetInlineEnd:'7px',width:'8px',height:'8px',borderRadius:'50%',background:'#8fd19e'}}) : null) : null,
       window.appSignOut ? h('button',{class:'menu-btn',style:{display:'inline-flex'},title:'התנתקות',onclick:()=>window.appSignOut()}, icon('logout',20)) : null,
       h('button',{class:'me-chip',style:{border:0,color:'#fff',cursor:'pointer'},title:'הפרטים שלי',onclick:()=>memberModal(S.me.id)}, h('span',{class:'me-name'}, nameOf(S.me.id), isAdmin() ? ' · מנהל' : ''), avatar(S.me.id))),
     h('div',{class:'layout'},
@@ -1223,11 +1237,60 @@ function generalView(){
     h('div',{class:'kpi green'}, h('div',{class:'kpi-num'}, Object.keys(S.members).length), h('div',{class:'kpi-label'}, 'אנשי סגל רשומים')));
 
   const ctx = { editable:true, manage:isAdmin() };
-  return h('div',null, hero, kpis,
+  return h('div',null, hero, pushNudge(), kpis,
     myTasksCard(),
     postsSection(),
     summariesSection('general', ctx),
     filesSection('general', ctx));
+}
+/* ---------- התראות לטלפון ---------- */
+function pushNudge(){
+  const P = window.__push;
+  if(!P || !P.configured() || P.enabledHere() || P.permission()==='denied') return null;
+  try { if(localStorage.getItem('segel-push-nudge') === 'off') return null; } catch(_){}
+  return h('div',{class:'banner',style:{display:'flex',alignItems:'center',gap:'10px',flexWrap:'wrap',background:'#e8f1ea',border:'1px solid #cfe0d3',borderRadius:'14px',padding:'10px 14px',margin:'0 0 16px'}},
+    icon('bell',20), h('div',{style:{flex:'1 1 220px'}}, h('b',null,'התראות לטלפון על תג״ב'), h('div',{class:'small muted'}, 'יומיים לפני, יום לפני, ביום עצמו, ואם התג״ב עבר והמשימה לא בוצעה.')),
+    h('button',{class:'btn primary sm',onclick:()=>pushModal()}, 'הפעלה'),
+    h('button',{class:'icon-btn',title:'לא עכשיו',onclick:()=>{ try { localStorage.setItem('segel-push-nudge','off'); } catch(_){} render(); }}, icon('x',16)));
+}
+async function pushModal(){
+  const P = window.__push; if(!P) return;
+  const body = h('div',{class:'form'}, h('p',{class:'muted'},'בודק…'));
+  const close = openModal({ title:'התראות לטלפון', body, footer:[ h('button',{class:'btn ghost',onclick:()=>close()},'סגירה') ] });
+  const intro = h('p',null,'תקבלו התראה על משימות שאתם אחראים עליהן: ', h('b',null,'יומיים לפני התג״ב, יום לפני, בבוקר של יום התג״ב'), ', ואם התג״ב עבר והמשימה עדיין לא סומנה כבוצעה. ההתראות נשלחות פעם ביום, בבוקר.');
+  const draw = async () => {
+    const parts = [intro];
+    const sup = await P.supported();
+    if(!P.configured()) parts.push(h('div',{class:'notice'}, 'ההתראות עדיין לא הוגדרו באתר. מנהל האתר צריך להשלים את שלב 8 במדריך ההתקנה.'));
+    else if(P.isIOS && !P.isStandalone()){
+      parts.push(h('div',{class:'notice'}, h('b',null,'באייפון צריך קודם להוסיף את האתר למסך הבית:'),
+        h('ol',{style:{margin:'8px 0 0',paddingInlineStart:'20px',lineHeight:1.9}},
+          h('li',null,'פותחים את האתר ב-Safari.'),
+          h('li',null,'לוחצים על כפתור השיתוף ', icon('share',15), ' ובוחרים ״הוספה למסך הבית״.'),
+          h('li',null,'פותחים את האתר מהאייקון החדש במסך הבית, מתחברים, ולוחצים כאן על ״הפעלת התראות״.')),
+        h('div',{class:'small muted',style:{marginTop:'6px'}},'נדרש iOS 16.4 ומעלה.')));
+    }
+    else if(!sup) parts.push(h('div',{class:'notice'}, 'הדפדפן הזה לא תומך בהתראות. נסו ב-Chrome, או באייפון — מהאייקון במסך הבית.'));
+    else if(P.permission()==='denied') parts.push(h('div',{class:'notice'}, 'ההתראות חסומות לאתר הזה. כדי לאפשר: בהגדרות הדפדפן / הטלפון ← התראות ← לאפשר לאתר, ואז לחזור לכאן.'));
+    else if(P.enabledHere()){
+      const t = h('button',{class:'btn',type:'button'}, 'התראת ניסיון');
+      t.onclick = async () => { try { await P.test(); } catch(e){ toast('הבדיקה נכשלה: ' + ((e && e.message) || e), 'err'); } };
+      const off = h('button',{class:'btn ghost',type:'button'}, 'כיבוי במכשיר הזה');
+      off.onclick = async () => { off.disabled = true; await P.disable(); toast('ההתראות כובו במכשיר הזה'); render(); draw(); };
+      parts.push(h('div',{class:'notice',style:{background:'#e8f1ea'}}, '✓ ההתראות פעילות במכשיר הזה.'), h('div',{style:{display:'flex',gap:'8px',flexWrap:'wrap'}}, t, off),
+        h('div',{class:'small muted'}, 'רוצים התראות גם במכשיר נוסף? נכנסים לאתר ממנו ומפעילים גם שם.'));
+    }
+    else {
+      const on = h('button',{class:'btn primary',type:'button'}, icon('bell',16), ' הפעלת התראות');
+      on.onclick = async () => { on.disabled = true; on.textContent = 'מפעיל…';
+        try { await P.enable(); toast('ההתראות הופעלו ✓'); render(); }
+        catch(e){ console.warn(e); toast((e && e.heb) || ('לא הצלחנו להפעיל: ' + ((e && (e.code || e.message)) || e)), 'err'); }
+        draw(); };
+      parts.push(on);
+    }
+    body.replaceChildren(...parts);
+  };
+  draw();
 }
 function myTasksCard(){
   const me = S.me.id, now = nowStr(), week = addDays(todayStr(),7);
